@@ -34,14 +34,17 @@ header {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 10rem;
+  height: 10rem;
   border-radius: 9px;
-  background: #1f1b16;
-  color: #f7d9a4;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  font-family: "Cinzel", "Garamond", serif;
+  padding: 4px;
+}
+
+.logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .title {

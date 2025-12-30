@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, copyFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const distDir = resolve("dist");
@@ -32,5 +32,7 @@ await writeFile("dist/popup.html", popupHtml, "utf8");
 
 const popupCss = await readFile("src/popup.css", "utf8");
 await writeFile("dist/popup.css", popupCss, "utf8");
+
+await copyFile("icon.png", resolve(distDir, "icon.png"));
 
 console.log("Build complete: dist/content.js, dist/popup.js, dist/manifest.json");
