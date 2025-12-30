@@ -20,3 +20,13 @@ npm run build
 - The build outputs `dist/content.js` and `dist/manifest.json`.
 - The popup UI is at `dist/popup.html` with `dist/popup.js` and `dist/popup.css`.
 - No background service worker is required for the MVP.
+
+## Production build and packaging
+
+```bash
+# Minified build
+npm run build:prod
+
+# Zip ready for Chrome Web Store upload
+npm run package   # creates timestamp-goblin.zip beside dist/
+```

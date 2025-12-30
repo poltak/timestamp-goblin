@@ -24,3 +24,5 @@ backend/lib
 backend/.env.memex-v2
 web-extension/extension.zip
 website/dist-help
+
+*.zip
