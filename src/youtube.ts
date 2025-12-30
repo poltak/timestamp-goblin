@@ -22,6 +22,44 @@ export function clampResumeTarget(t: number, duration: number): number {
   return Math.min(Math.max(0, t), maxTarget);
 }
 
+function pickText(selectors: string[]): string | null {
+  for (const selector of selectors) {
+    const el = document.querySelector(selector);
+    if (el && el.textContent) {
+      const text = el.textContent.trim();
+      if (text) {
+        return text;
+      }
+    }
+  }
+  return null;
+}
+
+export function getVideoTitle(): string | null {
+  const title = pickText([
+    "h1.title yt-formatted-string",
+    "h1.ytd-watch-metadata yt-formatted-string",
+    "h1.title",
+  ]);
+  if (title) {
+    return title;
+  }
+  const raw = document.title;
+  if (!raw) {
+    return null;
+  }
+  return raw.replace(/\s+-\s+YouTube\s*$/, "").trim() || null;
+}
+
+export function getChannelName(): string | null {
+  return pickText([
+    "ytd-channel-name a",
+    "#owner-name a",
+    "#text-container.ytd-channel-name",
+    "ytd-video-owner-renderer a",
+  ]);
+}
+
 type WaitHandle = {
   promise: Promise<HTMLVideoElement>;
   cancel: () => void;

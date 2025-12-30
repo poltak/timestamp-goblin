@@ -3,6 +3,9 @@
   "name": "Timestamp Goblin",
   "version": "0.1.0",
   "description": "Persist and restore YouTube watch progress.",
+  "action": {
+    "default_popup": "popup.html"
+  },
   "permissions": ["storage"],
   "host_permissions": ["https://www.youtube.com/*"],
   "content_scripts": [

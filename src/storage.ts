@@ -2,6 +2,8 @@ export type VideoState = {
   t: number;
   updatedAt: number;
   duration?: number;
+  title?: string;
+  channel?: string;
 };
 
 function keyFor(videoId: string): string {

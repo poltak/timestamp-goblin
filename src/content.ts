@@ -2,7 +2,9 @@ import { watchUrlChanges } from "./spa";
 import { getVideoState, setVideoState } from "./storage";
 import {
   clampResumeTarget,
+  getChannelName,
   getVideoId,
+  getVideoTitle,
   isLiveVideo,
   isWatchPage,
   waitForVideoElement,
@@ -93,10 +95,14 @@ async function saveNow(reason: string): Promise<void> {
   lastWriteAt = now;
 
   const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : undefined;
+  const title = getVideoTitle() ?? undefined;
+  const channel = getChannelName() ?? undefined;
   const payload = {
     t: video.currentTime,
     updatedAt: now,
     duration,
+    title,
+    channel,
   };
 
   log("save", reason, payload);

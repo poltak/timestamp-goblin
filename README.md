@@ -18,4 +18,5 @@ npm run build
 ## Notes
 
 - The build outputs `dist/content.js` and `dist/manifest.json`.
+- The popup UI is at `dist/popup.html` with `dist/popup.js` and `dist/popup.css`.
 - No background service worker is required for the MVP.
