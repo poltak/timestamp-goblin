@@ -1,0 +1,26 @@
+node_modules
+dist
+build
+*.log
+.DS_Store
+.env
+firebase-debug.log
+firebase-debug*.log
+
+# Vite
+.vite
+
+# Extension
+packages/extension/dist
+
+# Backend
+packages/backend/lib
+
+.eslintcache
+*.tsbuildinfo
+
+backend/lib
+*.local
+backend/.env.memex-v2
+web-extension/extension.zip
+website/dist-help

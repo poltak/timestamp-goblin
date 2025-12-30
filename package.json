@@ -1,0 +1,14 @@
+{
+  "name": "timestamp-goblin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome extension to persist YouTube watch progress.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.2",
+    "typescript": "^5.4.5"
+  }
+}
