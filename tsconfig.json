@@ -7,7 +7,8 @@
         "strict": true,
         "noEmit": true,
         "skipLibCheck": true,
-        "noImplicitAny": false
+        "noImplicitAny": false,
+        "types": ["chrome-types", "./env.d.ts"]
     },
     "include": ["src"]
 }

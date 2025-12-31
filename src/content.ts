@@ -10,7 +10,7 @@ import {
     waitForVideoElement,
 } from './youtube'
 
-const DEBUG = false
+const DEBUG = import.meta.env.MODE !== 'production'
 
 const minResumeSeconds = 15
 const nearStartWindowSeconds = 6

@@ -46,6 +46,9 @@ await Promise.all(
             platform: 'browser',
             target: ['es2018'],
             minify: isProd,
+            define: {
+                'import.meta.env.MODE': JSON.stringify(modeLabel),
+            },
         })
         if (isWatch) {
             console.log(`Watching ${script.entry}...`)
