@@ -29,7 +29,10 @@ await writeFile('dist/popup.html', popupHtml, 'utf8')
 const popupCss = await readFile('src/popup.css', 'utf8')
 await writeFile('dist/popup.css', popupCss, 'utf8')
 
-await copyFile('icon.png', resolve(distDir, 'icon.png'))
+await copyFile('icon-128.png', resolve(distDir, 'icon-128.png'))
+await copyFile('icon-48.png', resolve(distDir, 'icon-48.png'))
+await copyFile('icon-32.png', resolve(distDir, 'icon-32.png'))
+await copyFile('icon-16.png', resolve(distDir, 'icon-16.png'))
 
 const modeLabel = isProd ? 'production' : 'development'
 console.log(
