@@ -1,4 +1,4 @@
-import { watchUrlChanges } from './spa'
+import { watchUrlChanges, type UrlChangeHandler } from './spa'
 import { getVideoState, setVideoState } from './storage'
 import {
     clampResumeTarget,
@@ -202,7 +202,7 @@ async function initForVideo(videoId: string): Promise<void> {
     startSavingLoop()
 }
 
-function handleUrlChange(): void {
+const handleUrlChange: UrlChangeHandler = () => {
     const nextVideoId = getVideoId()
     if (nextVideoId === activeVideoId) {
         return
@@ -215,5 +215,10 @@ function handleUrlChange(): void {
     void initForVideo(nextVideoId)
 }
 
-watchUrlChanges(handleUrlChange, 150)
+const unwatchUrlChanges = watchUrlChanges(handleUrlChange, { debounceMs: 150 })
 handleUrlChange()
+
+// TODO: some way to disable the ext behavior
+window.addEventListener('beforeunload', () => {
+    unwatchUrlChanges()
+})

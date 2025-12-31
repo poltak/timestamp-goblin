@@ -1,54 +1,38 @@
-type UrlChangeHandler = () => void
+import { debounce } from './debounce'
 
-let patched = false
-let originalPushState: History['pushState'] | null = null
-let originalReplaceState: History['replaceState'] | null = null
+export type UrlChangeHandler = () => void
+
+let isPatched = false
 
 function patchHistory(dispatch: () => void): void {
-    if (patched) {
+    if (isPatched) {
         return
     }
-    patched = true
-    originalPushState = history.pushState
-    originalReplaceState = history.replaceState
+    isPatched = true
+    const originalPushState = history.pushState
+    const originalReplaceState = history.replaceState
 
-    history.pushState = function (...args) {
-        const result = originalPushState!.apply(this, args as any)
+    history.pushState = (...args) => {
+        const result = originalPushState.apply(history, args)
         dispatch()
         return result
-    } as History['pushState']
+    }
 
-    history.replaceState = function (...args) {
-        const result = originalReplaceState!.apply(this, args as any)
+    history.replaceState = (...args) => {
+        const result = originalReplaceState.apply(history, args)
         dispatch()
         return result
-    } as History['replaceState']
+    }
 }
 
 export function watchUrlChanges(
     handler: UrlChangeHandler,
-    debounceMs = 150,
+    options: { debounceMs: number },
 ): () => void {
-    let timer: number | null = null
-
-    const debounced = () => {
-        if (timer !== null) {
-            window.clearTimeout(timer)
-        }
-        timer = window.setTimeout(() => {
-            timer = null
-            handler()
-        }, debounceMs)
-    }
+    const debounced = debounce(handler, options.debounceMs)
 
     patchHistory(debounced)
     window.addEventListener('popstate', debounced)
 
-    return () => {
-        if (timer !== null) {
-            window.clearTimeout(timer)
-            timer = null
-        }
-        window.removeEventListener('popstate', debounced)
-    }
+    return () => window.removeEventListener('popstate', debounced)
 }
