@@ -1,0 +1,6 @@
+release/
+node_modules/
+.git/
+package.json
+package-lock.json
+worker-configuration.d.ts

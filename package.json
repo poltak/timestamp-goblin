@@ -1,16 +1,18 @@
 {
-  "name": "timestamp-goblin",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Chrome extension to persist YouTube watch progress.",
-  "type": "module",
-  "scripts": {
-    "build": "node build.mjs",
-    "build:prod": "NODE_ENV=production node build.mjs",
-    "package": "npm run build:prod && node scripts/package.mjs"
-  },
-  "devDependencies": {
-    "esbuild": "^0.20.2",
-    "typescript": "^5.4.5"
-  }
+    "name": "timestamp-goblin",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Chrome extension to persist YouTube watch progress.",
+    "type": "module",
+    "scripts": {
+        "build": "node build.mjs",
+        "build:prod": "NODE_ENV=production node build.mjs",
+        "package": "npm run build:prod && node scripts/package.mjs",
+        "format": "prettier --write \"**/*.{ts,json,md}\""
+    },
+    "devDependencies": {
+        "esbuild": "^0.20.2",
+        "prettier": "^3.7.4",
+        "typescript": "^5.4.5"
+    }
 }
