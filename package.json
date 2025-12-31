@@ -5,9 +5,9 @@
     "description": "Chrome extension to persist YouTube watch progress.",
     "type": "module",
     "scripts": {
-        "build": "node build.mjs",
-        "build:watch": "node build.mjs --watch",
-        "build:prod": "NODE_ENV=production node build.mjs",
+        "build": "node scripts/build.mjs",
+        "build:watch": "node scripts/build.mjs --watch",
+        "build:prod": "NODE_ENV=production node scripts/build.mjs",
         "check": "tsc --noEmit",
         "check:watch": "tsc --noEmit --watch",
         "package": "npm run build:prod && node scripts/package.mjs",
