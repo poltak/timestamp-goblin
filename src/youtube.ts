@@ -48,7 +48,7 @@ export function getVideoTitle(): string | null {
     if (!raw) {
         return null
     }
-    return raw.replace(/\s+-\s+YouTube\s*$/, '').trim() || null
+    return raw.replace(/\s+-\s+YouTube\s*$/, '').trim() ?? null
 }
 
 export function getChannelName(): string | null {

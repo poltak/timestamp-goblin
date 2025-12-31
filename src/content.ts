@@ -9,13 +9,16 @@ import {
     isWatchPage,
     waitForVideoElement,
 } from './youtube'
-
-const DEBUG = import.meta.env.MODE !== 'production'
-
-const minResumeSeconds = 15
-const nearStartWindowSeconds = 6
-const saveIntervalSeconds = 8
-const minWriteGapMs = 1000
+import type { StoredVideoState } from './types'
+import {
+    MIN_WRITE_GAP_MS,
+    MIN_RESUME_SECONDS,
+    DEFAULT_VIDEO_TITLE,
+    DEFAULT_CHANNEL_NAME,
+    SAVE_INTERVAL_SECONDS,
+    NEAR_START_WINDOW_SECONDS,
+} from './constants'
+import { log } from './util'
 
 let activeVideoId: string | null = null
 let activeVideo: HTMLVideoElement | null = null
@@ -24,12 +27,6 @@ let lastWriteAt = 0
 let initToken = 0
 let waitHandle: ReturnType<typeof waitForVideoElement> | null = null
 let resumeReapplyId: number | null = null
-
-function log(...args: unknown[]): void {
-    if (DEBUG) {
-        console.log('[TimestampGoblin]', ...args)
-    }
-}
 
 function teardown(): void {
     initToken += 1
@@ -79,33 +76,30 @@ function isSafeToSave(video: HTMLVideoElement): boolean {
 async function saveNow(reason: string): Promise<void> {
     const videoId = activeVideoId
     const video = activeVideo
-    if (!videoId || !video) {
-        return
-    }
-    if (videoId !== getVideoId()) {
-        return
-    }
-    if (!isSafeToSave(video)) {
-        return
-    }
     const now = Date.now()
-    if (now - lastWriteAt < minWriteGapMs) {
+    if (
+        !videoId ||
+        !video ||
+        videoId !== getVideoId() ||
+        !isSafeToSave(video) ||
+        now - lastWriteAt < MIN_WRITE_GAP_MS
+    ) {
         return
     }
-    lastWriteAt = now
 
+    lastWriteAt = now
     const duration =
         Number.isFinite(video.duration) && video.duration > 0
             ? video.duration
-            : undefined
-    const title = getVideoTitle() ?? undefined
-    const channel = getChannelName() ?? undefined
-    const payload = {
+            : Infinity
+    const title = getVideoTitle() ?? DEFAULT_VIDEO_TITLE
+    const channel = getChannelName() ?? DEFAULT_CHANNEL_NAME
+    const payload: StoredVideoState = {
         t: video.currentTime,
         updatedAt: now,
         duration,
-        title,
         channel,
+        title,
     }
 
     log('save', reason, payload)
@@ -128,7 +122,7 @@ function startSavingLoop(): void {
     }
     saveIntervalId = window.setInterval(() => {
         void saveNow('interval')
-    }, saveIntervalSeconds * 1000)
+    }, SAVE_INTERVAL_SECONDS * 1000)
 }
 
 async function tryResume(
@@ -137,19 +131,13 @@ async function tryResume(
     token: number,
 ): Promise<void> {
     const state = await getVideoState(videoId)
-    if (token !== initToken) {
-        return
-    }
-    if (!state) {
-        return
-    }
-    if (state.t < minResumeSeconds) {
-        return
-    }
-    if (isLiveVideo(video)) {
-        return
-    }
-    if (video.currentTime > nearStartWindowSeconds) {
+    if (
+        token !== initToken ||
+        !state ||
+        state.t < MIN_RESUME_SECONDS ||
+        isLiveVideo(video) ||
+        video.currentTime > NEAR_START_WINDOW_SECONDS
+    ) {
         return
     }
 

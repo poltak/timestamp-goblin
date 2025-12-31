@@ -8,6 +8,8 @@
         "build": "node build.mjs",
         "build:watch": "node build.mjs --watch",
         "build:prod": "NODE_ENV=production node build.mjs",
+        "check": "tsc --noEmit",
+        "check:watch": "tsc --noEmit --watch",
         "package": "npm run build:prod && node scripts/package.mjs",
         "format": "prettier --write \"**/*.{ts,json,md}\""
     },

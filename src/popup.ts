@@ -1,38 +1,19 @@
-type StoredVideo = {
-    t: number
-    updatedAt: number
-    duration?: number
-    title?: string
-    channel?: string
-}
+import { getAllVideoStates } from './storage'
+import type { StoredVideoState, VideoItem } from './types'
+import { DEFAULT_UNFINISHED_BUFFER_SECONDS, MAX_POPUP_ITEMS } from './constants'
 
-type VideoItem = StoredVideo & {
-    videoId: string
-}
-
-const maxItems = 20
-
-function isVideoKey(key: string): boolean {
-    return key.startsWith('ytp:')
-}
-
-function videoIdFromKey(key: string): string {
-    return key.slice(4)
-}
-
-function isUnfinished(item: VideoItem): boolean {
-    if (!item.duration || !Number.isFinite(item.duration)) {
-        return true
+function isVideoUnfinished(
+    state: StoredVideoState,
+    bufferSeconds = DEFAULT_UNFINISHED_BUFFER_SECONDS,
+): boolean {
+    if (!Number.isFinite(state.duration)) {
+        return false
     }
-    return item.t < item.duration - 5
+    return state.t < state.duration - bufferSeconds
 }
 
 function formatPercent(item: VideoItem): string {
-    if (
-        !item.duration ||
-        !Number.isFinite(item.duration) ||
-        item.duration <= 0
-    ) {
+    if (!Number.isFinite(item.duration) || item.duration <= 0) {
         return '--%'
     }
     const pct = Math.min(
@@ -98,35 +79,12 @@ function escapeHtml(value: string): string {
 }
 
 async function loadItems(): Promise<VideoItem[]> {
-    const all = await chrome.storage.local.get(null)
-    const items: VideoItem[] = []
-
-    for (const [key, value] of Object.entries(all)) {
-        if (!isVideoKey(key)) {
-            continue
-        }
-        const state = value as StoredVideo | undefined
-        if (
-            !state ||
-            typeof state.t !== 'number' ||
-            typeof state.updatedAt !== 'number'
-        ) {
-            continue
-        }
-        items.push({
-            videoId: videoIdFromKey(key),
-            t: state.t,
-            updatedAt: state.updatedAt,
-            duration: state.duration,
-            title: state.title,
-            channel: state.channel,
-        })
-    }
-
-    return items
-        .filter(isUnfinished)
+    const videos = await getAllVideoStates()
+    const items = videos
+        .filter(isVideoUnfinished)
         .sort((a, b) => b.updatedAt - a.updatedAt)
-        .slice(0, maxItems)
+        .slice(0, MAX_POPUP_ITEMS)
+    return items
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
