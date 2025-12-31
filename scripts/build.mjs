@@ -35,13 +35,10 @@ await copyFile('src/assets/icon-32.png', resolve(distDir, 'icon-32.png'))
 await copyFile('src/assets/icon-16.png', resolve(distDir, 'icon-16.png'))
 
 const modeLabel = isProd ? 'production' : 'development'
-console.log(
-    `Build (${modeLabel}) complete: dist/content.js, dist/popup.js, dist/manifest.json`,
-)
 
 await Promise.all(
     Object.values(SCRIPTS).map(async (script) => {
-        const ctx = await context({
+        const buildOptions = {
             entryPoints: [script.entry],
             outfile: script.outfile,
             bundle: true,
@@ -52,15 +49,21 @@ await Promise.all(
             define: {
                 'import.meta.env.MODE': JSON.stringify(modeLabel),
             },
-        })
+        }
+
         if (isWatch) {
+            const ctx = await context(buildOptions)
             console.log(`Watching ${script.entry}...`)
             await ctx.watch()
+        } else {
+            await build(buildOptions)
+            console.log(`Built ${script.entry} -> ${script.outfile}`)
         }
     }),
 )
 
+console.log(`\nBuild (${modeLabel}) complete!`)
+
 if (!isWatch) {
-    console.log('done')
     process.exit(0)
 }
