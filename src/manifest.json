@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Timestamp Goblin",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Persist and restore YouTube watch progress.",
     "action": {
         "default_popup": "popup.html",
@@ -18,12 +18,20 @@
         "48": "icon-48.png",
         "128": "icon-128.png"
     },
-    "permissions": ["storage"],
-    "host_permissions": ["https://www.youtube.com/*"],
+    "permissions": [
+        "storage"
+    ],
+    "host_permissions": [
+        "https://www.youtube.com/*"
+    ],
     "content_scripts": [
         {
-            "matches": ["https://www.youtube.com/*"],
-            "js": ["content.js"],
+            "matches": [
+                "https://www.youtube.com/*"
+            ],
+            "js": [
+                "content.js"
+            ],
             "run_at": "document_idle"
         }
     ]
