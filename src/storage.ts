@@ -1,6 +1,8 @@
 import type { StoredVideoState, VideoItem } from './types'
 
 const VIDEO_KEY_PREFIX = 'ytp:'
+type RawStoredVideoState = Omit<StoredVideoState, 'maxT'> &
+    Partial<Pick<StoredVideoState, 'maxT'>>
 
 function keyFor(videoId: string): string {
     return `${VIDEO_KEY_PREFIX}${videoId}`
@@ -14,22 +16,36 @@ function videoIdFromKey(key: string): string {
     return key.slice(VIDEO_KEY_PREFIX.length)
 }
 
-function isValidState(state?: StoredVideoState): boolean {
-    return (
-        !!state &&
-        typeof state.t === 'number' &&
-        typeof state.updatedAt === 'number'
-    )
+function normalizeState(state?: RawStoredVideoState): StoredVideoState | null {
+    if (
+        !state ||
+        typeof state.lastWatchedTimestamp !== 'number' ||
+        typeof state.updatedAt !== 'number'
+    ) {
+        return null
+    }
+    const maxT =
+        typeof state.furthestWatchedTimestamp === 'number'
+            ? state.furthestWatchedTimestamp
+            : state.lastWatchedTimestamp
+    return {
+        ...state,
+        furthestWatchedTimestamp: maxT,
+    } as StoredVideoState
 }
 
 export async function getAllVideoStates(): Promise<VideoItem[]> {
     const all = await chrome.storage.local.get()
-    const items = Object.entries(all)
-        .filter(([key, value]) => isVideoKey(key) && isValidState(value))
+    const items = Object.entries(all ?? {})
+        .filter(([key]) => isVideoKey(key))
         .map(([key, value]) => {
-            const state = value as StoredVideoState
+            const state = normalizeState(value as RawStoredVideoState)
+            if (!state) {
+                return null
+            }
             return {
-                t: state.t,
+                lastWatchedTimestamp: state.lastWatchedTimestamp,
+                furthestWatchedTimestamp: state.furthestWatchedTimestamp,
                 title: state.title,
                 channel: state.channel,
                 duration: state.duration,
@@ -37,6 +53,7 @@ export async function getAllVideoStates(): Promise<VideoItem[]> {
                 videoId: videoIdFromKey(key),
             } as VideoItem
         })
+        .filter((item): item is VideoItem => item !== null)
     return items
 }
 
@@ -45,11 +62,8 @@ export async function getVideoState(
 ): Promise<StoredVideoState | null> {
     const key = keyFor(videoId)
     const result = await chrome.storage.local.get(key)
-    const value = result[key] as StoredVideoState | undefined
-    if (!value || typeof value.t !== 'number') {
-        return null
-    }
-    return value
+    const value = result[key] as RawStoredVideoState | undefined
+    return normalizeState(value)
 }
 
 export async function setVideoState(

@@ -27,6 +27,7 @@ let lastWriteAt = 0
 let initToken = 0
 let waitHandle: ReturnType<typeof waitForVideoElement> | null = null
 let resumeReapplyId: number | null = null
+let maxProgressSeconds = 0
 
 function teardown(): void {
     initToken += 1
@@ -54,6 +55,7 @@ function teardown(): void {
     activeVideo = null
     activeVideoId = null
     lastWriteAt = 0
+    maxProgressSeconds = 0
 }
 
 function isSafeToSave(video: HTMLVideoElement): boolean {
@@ -88,6 +90,7 @@ async function saveNow(reason: string): Promise<void> {
     }
 
     lastWriteAt = now
+    maxProgressSeconds = Math.max(maxProgressSeconds, video.currentTime)
     const duration =
         Number.isFinite(video.duration) && video.duration > 0
             ? video.duration
@@ -95,7 +98,8 @@ async function saveNow(reason: string): Promise<void> {
     const title = getVideoTitle() ?? DEFAULT_VIDEO_TITLE
     const channel = getChannelName() ?? DEFAULT_CHANNEL_NAME
     const payload: StoredVideoState = {
-        t: video.currentTime,
+        lastWatchedTimestamp: video.currentTime,
+        furthestWatchedTimestamp: maxProgressSeconds,
         updatedAt: now,
         duration,
         channel,
@@ -129,19 +133,19 @@ async function tryResume(
     video: HTMLVideoElement,
     videoId: string,
     token: number,
+    state: StoredVideoState | null,
 ): Promise<void> {
-    const state = await getVideoState(videoId)
     if (
         token !== initToken ||
         !state ||
-        state.t < MIN_RESUME_SECONDS ||
+        state.lastWatchedTimestamp < MIN_RESUME_SECONDS ||
         isLiveVideo(video) ||
         video.currentTime > NEAR_START_WINDOW_SECONDS
     ) {
         return
     }
 
-    const target = clampResumeTarget(state.t, video.duration)
+    const target = clampResumeTarget(state.lastWatchedTimestamp, video.duration)
     log('resume', { videoId, target, current: video.currentTime })
     video.currentTime = target
 
@@ -180,7 +184,17 @@ async function initForVideo(videoId: string): Promise<void> {
 
     activeVideo = video
 
-    await tryResume(video, videoId, token)
+    const storedState = await getVideoState(videoId)
+    if (token !== initToken) {
+        return
+    }
+    maxProgressSeconds = storedState
+        ? Math.max(
+              storedState.furthestWatchedTimestamp,
+              storedState.lastWatchedTimestamp,
+          )
+        : 0
+    await tryResume(video, videoId, token, storedState)
     if (token !== initToken) {
         return
     }

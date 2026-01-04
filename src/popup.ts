@@ -9,7 +9,7 @@ function isVideoUnfinished(
     if (!Number.isFinite(state.duration)) {
         return false
     }
-    return state.t < state.duration - bufferSeconds
+    return state.furthestWatchedTimestamp < state.duration - bufferSeconds
 }
 
 function formatPercent(item: VideoItem): string {
@@ -18,7 +18,10 @@ function formatPercent(item: VideoItem): string {
     }
     const pct = Math.min(
         100,
-        Math.max(0, Math.round((item.t / item.duration) * 100)),
+        Math.max(
+            0,
+            Math.round((item.furthestWatchedTimestamp / item.duration) * 100),
+        ),
     )
     return `${pct}%`
 }

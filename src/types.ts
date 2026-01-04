@@ -1,5 +1,6 @@
 export interface StoredVideoState {
-    t: number
+    lastWatchedTimestamp: number
+    furthestWatchedTimestamp: number
     updatedAt: number
     duration: number
     title: string
