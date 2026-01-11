@@ -63,6 +63,7 @@ function teardown(): void {
 
     if (activeVideo) {
         activeVideo.removeEventListener('pause', onPause)
+        activeVideo.removeEventListener('play', onPlay)
     }
     document.removeEventListener('visibilitychange', onVisibilityChange)
 
@@ -129,18 +130,35 @@ async function saveNow(reason: string): Promise<void> {
 
 function onPause(): void {
     void saveNow('pause')
+    stopSavingLoop()
+}
+
+function onPlay(): void {
+    startSavingLoop()
 }
 
 function onVisibilityChange(): void {
     if (document.hidden) {
         void saveNow('hidden')
+        stopSavingLoop()
+    } else if (activeVideo && !activeVideo.paused) {
+        startSavingLoop()
+    }
+}
+
+function stopSavingLoop(): void {
+    if (saveIntervalId !== null) {
+        log('stop saving loop')
+        window.clearInterval(saveIntervalId)
+        saveIntervalId = null
     }
 }
 
 function startSavingLoop(): void {
     if (saveIntervalId !== null) {
-        window.clearInterval(saveIntervalId)
+        return
     }
+    log('start saving loop')
     saveIntervalId = window.setInterval(() => {
         void saveNow('interval')
     }, SAVE_INTERVAL_SECONDS * 1000)
@@ -216,8 +234,12 @@ async function initForVideo(videoId: string): Promise<void> {
     }
 
     video.addEventListener('pause', onPause)
+    video.addEventListener('play', onPlay)
     document.addEventListener('visibilitychange', onVisibilityChange)
-    startSavingLoop()
+
+    if (!video.paused && !document.hidden) {
+        startSavingLoop()
+    }
 }
 
 const handleUrlChange: UrlChangeHandler = () => {
