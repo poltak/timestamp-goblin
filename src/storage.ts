@@ -59,3 +59,8 @@ export async function setVideoState(
     const key = keyFor(videoId)
     await chrome.storage.local.set({ [key]: state })
 }
+
+export async function deleteVideoState(videoId: string): Promise<void> {
+    const key = keyFor(videoId)
+    await chrome.storage.local.remove(key)
+}

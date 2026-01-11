@@ -84,6 +84,7 @@ async function saveNow(reason: string): Promise<void> {
         !isSafeToSave(video) ||
         now - lastWriteAt < MIN_WRITE_GAP_MS
     ) {
+        log('not saving', { videoId, video, now, lastWriteAt })
         return
     }
 

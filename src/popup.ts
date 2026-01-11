@@ -1,4 +1,4 @@
-import { getAllVideoStates } from './storage'
+import { getAllVideoStates, deleteVideoState } from './storage'
 import type { StoredVideoState, VideoItem } from './types'
 import { DEFAULT_UNFINISHED_BUFFER_SECONDS, MAX_POPUP_ITEMS } from './constants'
 
@@ -48,7 +48,7 @@ function render(items: VideoItem[]): void {
             const channel = item.channel || 'Unknown channel'
             const percent = formatPercent(item)
             return `
-        <button class="card" data-video-id="${item.videoId}">
+        <div class="card" data-video-id="${item.videoId}">
           <div class="title">${escapeHtml(title)}</div>
           <div class="meta">
             <span class="channel">${escapeHtml(channel)}</span>
@@ -57,19 +57,44 @@ function render(items: VideoItem[]): void {
           <div class="bar">
             <div class="fill" style="width: ${percent}"></div>
           </div>
-        </button>
+          <button class="delete-btn" title="Remove from list" data-video-id="${item.videoId}">
+            <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </button>
+        </div>
       `
         })
         .join('')
 
-    root.querySelectorAll<HTMLButtonElement>('button.card').forEach((btn) => {
-        btn.addEventListener('click', () => {
-            const id = btn.dataset.videoId
+    root.querySelectorAll<HTMLDivElement>('div.card').forEach((card) => {
+        card.addEventListener('click', (e) => {
+            // Only open video if the card itself (or its non-button children) was clicked
+            const target = e.target as HTMLElement
+            if (target.closest('.delete-btn')) {
+                return
+            }
+            const id = card.dataset.videoId
             if (id) {
                 openVideo(id)
             }
         })
     })
+
+    root.querySelectorAll<HTMLButtonElement>('button.delete-btn').forEach(
+        (btn) => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation()
+                const id = btn.dataset.videoId
+                if (id) {
+                    await deleteVideoState(id)
+                    const updatedItems = await loadItems()
+                    render(updatedItems)
+                }
+            })
+        },
+    )
 }
 
 function escapeHtml(value: string): string {
