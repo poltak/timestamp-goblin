@@ -17,8 +17,10 @@ import {
     DEFAULT_CHANNEL_NAME,
     SAVE_INTERVAL_SECONDS,
     NEAR_START_WINDOW_SECONDS,
+    DEBUG,
 } from './constants'
 import { log } from './util'
+import { debounce } from './debounce'
 
 let activeVideoId: string | null = null
 let activeVideo: HTMLVideoElement | null = null
@@ -27,6 +29,18 @@ let lastWriteAt = 0
 let initToken = 0
 let waitHandle: ReturnType<typeof waitForVideoElement> | null = null
 let resumeReapplyId: number | null = null
+
+if (DEBUG) {
+    globalThis['getState'] = () => ({
+        activeVideo,
+        activeVideoId,
+        lastWriteAt,
+        initToken,
+        waitHandle,
+        resumeReapplyId,
+        saveIntervalId,
+    })
+}
 
 function teardown(): void {
     initToken += 1
@@ -193,6 +207,7 @@ async function initForVideo(videoId: string): Promise<void> {
 
 const handleUrlChange: UrlChangeHandler = () => {
     const nextVideoId = getVideoId()
+    log('url change', { nextVideoId, activeVideoId })
     if (nextVideoId === activeVideoId) {
         return
     }
@@ -204,10 +219,16 @@ const handleUrlChange: UrlChangeHandler = () => {
     void initForVideo(nextVideoId)
 }
 
-const unwatchUrlChanges = watchUrlChanges(handleUrlChange, { debounceMs: 150 })
+const debouncedHandleUrlChange = debounce(handleUrlChange, 150)
+
+const unwatchUrlChanges = watchUrlChanges(debouncedHandleUrlChange, {
+    debounceMs: 0,
+})
+window.addEventListener('yt-navigate-finish', debouncedHandleUrlChange)
 handleUrlChange()
 
 // TODO: some way to disable the ext behavior
 window.addEventListener('beforeunload', () => {
     unwatchUrlChanges()
+    window.removeEventListener('yt-navigate-finish', debouncedHandleUrlChange)
 })
