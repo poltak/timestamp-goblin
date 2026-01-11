@@ -29,6 +29,7 @@ let lastWriteAt = 0
 let initToken = 0
 let waitHandle: ReturnType<typeof waitForVideoElement> | null = null
 let resumeReapplyId: number | null = null
+let currentFurthestTime = 0
 
 if (DEBUG) {
     globalThis['getState'] = () => ({
@@ -68,6 +69,7 @@ function teardown(): void {
     activeVideo = null
     activeVideoId = null
     lastWriteAt = 0
+    currentFurthestTime = 0
 }
 
 function isSafeToSave(video: HTMLVideoElement): boolean {
@@ -109,8 +111,12 @@ async function saveNow(reason: string): Promise<void> {
             : Infinity
     const title = getVideoTitle() ?? DEFAULT_VIDEO_TITLE
     const channel = getChannelName() ?? DEFAULT_CHANNEL_NAME
+
+    currentFurthestTime = Math.max(currentFurthestTime, video.currentTime)
+
     const payload: StoredVideoState = {
         t: video.currentTime,
+        ft: currentFurthestTime,
         updatedAt: now,
         duration,
         channel,
@@ -146,8 +152,17 @@ async function tryResume(
     token: number,
 ): Promise<void> {
     const state = await getVideoState(videoId)
+    if (token !== initToken) {
+        return
+    }
+
+    if (state) {
+        currentFurthestTime = typeof state.ft === 'number' ? state.ft : state.t
+    } else {
+        currentFurthestTime = 0
+    }
+
     if (
-        token !== initToken ||
         !state ||
         state.t < MIN_RESUME_SECONDS ||
         isLiveVideo(video) ||

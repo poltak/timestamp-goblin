@@ -30,6 +30,7 @@ export async function getAllVideoStates(): Promise<VideoItem[]> {
             const state = value as StoredVideoState
             return {
                 t: state.t,
+                ft: typeof state.ft === 'number' ? state.ft : state.t,
                 title: state.title,
                 channel: state.channel,
                 duration: state.duration,
