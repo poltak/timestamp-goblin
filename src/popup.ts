@@ -1,15 +1,30 @@
 import { getAllVideoStates, deleteVideoState } from './storage'
 import type { StoredVideoState, VideoItem } from './types'
-import { DEFAULT_UNFINISHED_BUFFER_SECONDS, MAX_POPUP_ITEMS } from './constants'
+import {
+    DEFAULT_UNFINISHED_BUFFER_SECONDS,
+    MAX_POPUP_ITEMS,
+    MIN_RESUME_SECONDS,
+} from './constants'
 
-function isVideoUnfinished(
-    state: StoredVideoState,
-    bufferSeconds = DEFAULT_UNFINISHED_BUFFER_SECONDS,
-): boolean {
+type Tab = 'unfinished' | 'unwatched' | 'finished'
+
+let currentTab: Tab = 'unfinished'
+let allVideos: VideoItem[] = []
+
+function categorizeVideo(state: StoredVideoState): Tab {
     if (!Number.isFinite(state.duration)) {
-        return false
+        return 'unwatched'
     }
-    return state.t < state.duration - bufferSeconds
+
+    if (state.t < MIN_RESUME_SECONDS) {
+        return 'unwatched'
+    }
+
+    if (state.t >= state.duration - DEFAULT_UNFINISHED_BUFFER_SECONDS) {
+        return 'finished'
+    }
+
+    return 'unfinished'
 }
 
 function formatPercent(item: VideoItem): string {
@@ -28,16 +43,31 @@ function openVideo(videoId: string): void {
     window.open(url, '_blank')
 }
 
-function render(items: VideoItem[]): void {
+function render(): void {
     const root = document.getElementById('list')
     const empty = document.getElementById('empty')
     if (!root || !empty) {
         return
     }
 
+    const items = allVideos
+        .filter((v) => categorizeVideo(v) === currentTab)
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, MAX_POPUP_ITEMS)
+
+    document.querySelectorAll('.tab-btn').forEach((btn) => {
+        const tab = (btn as HTMLElement).dataset.tab as Tab
+        if (tab === currentTab) {
+            btn.classList.add('active')
+        } else {
+            btn.classList.remove('active')
+        }
+    })
+
     if (items.length === 0) {
         root.innerHTML = ''
         empty.classList.remove('hidden')
+        empty.textContent = `No ${currentTab} videos yet.`
         return
     }
 
@@ -70,7 +100,6 @@ function render(items: VideoItem[]): void {
 
     root.querySelectorAll<HTMLDivElement>('div.card').forEach((card) => {
         card.addEventListener('click', (e) => {
-            // Only open video if the card itself (or its non-button children) was clicked
             const target = e.target as HTMLElement
             if (target.closest('.delete-btn')) {
                 return
@@ -89,8 +118,7 @@ function render(items: VideoItem[]): void {
                 const id = btn.dataset.videoId
                 if (id) {
                     await deleteVideoState(id)
-                    const updatedItems = await loadItems()
-                    render(updatedItems)
+                    await refreshData()
                 }
             })
         },
@@ -103,16 +131,19 @@ function escapeHtml(value: string): string {
     return div.innerHTML
 }
 
-async function loadItems(): Promise<VideoItem[]> {
-    const videos = await getAllVideoStates()
-    const items = videos
-        .filter(isVideoUnfinished)
-        .sort((a, b) => b.updatedAt - a.updatedAt)
-        .slice(0, MAX_POPUP_ITEMS)
-    return items
+async function refreshData(): Promise<void> {
+    allVideos = await getAllVideoStates()
+    render()
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    const items = await loadItems()
-    render(items)
+    // Setup tab listeners
+    document.querySelectorAll('.tab-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            currentTab = (btn as HTMLElement).dataset.tab as Tab
+            render()
+        })
+    })
+
+    await refreshData()
 })

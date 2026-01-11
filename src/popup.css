@@ -48,7 +48,7 @@ body {
 }
 
 header {
-    padding: 16px;
+    padding: 16px 16px 0;
     background: var(--accent-bg);
     border-bottom: 1px solid var(--stroke);
     flex-shrink: 0;
@@ -58,6 +58,49 @@ header {
     display: flex;
     gap: 12px;
     align-items: center;
+    padding-bottom: 12px;
+}
+
+.tabs {
+    display: flex;
+    gap: 16px;
+}
+
+.tab-btn {
+    background: none;
+    border: none;
+    padding: 8px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    position: relative;
+    transition: color 150ms ease;
+}
+
+@media (prefers-color-scheme: dark) {
+    .tab-btn {
+        color: rgba(255, 255, 255, 0.5);
+    }
+}
+
+.tab-btn:hover {
+    color: var(--ink);
+}
+
+.tab-btn.active {
+    color: var(--ink);
+}
+
+.tab-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--ink);
+    border-radius: 2px;
 }
 
 .logo {

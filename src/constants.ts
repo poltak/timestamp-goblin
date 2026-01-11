@@ -7,6 +7,6 @@ export const NEAR_START_WINDOW_SECONDS = 6
 export const MIN_WRITE_GAP_MS = 1000
 
 export const MAX_POPUP_ITEMS = 20
-export const DEFAULT_UNFINISHED_BUFFER_SECONDS = 5
+export const DEFAULT_UNFINISHED_BUFFER_SECONDS = 15
 
 export const DEBUG = import.meta.env.MODE !== 'production'
