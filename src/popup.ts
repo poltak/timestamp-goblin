@@ -55,12 +55,34 @@ function render(): void {
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(0, MAX_POPUP_ITEMS)
 
+    const counts: Record<Tab, number> = {
+        unfinished: 0,
+        unwatched: 0,
+        finished: 0,
+    }
+    allVideos.forEach((v) => {
+        counts[categorizeVideo(v)]++
+    })
+
     document.querySelectorAll('.tab-btn').forEach((btn) => {
         const tab = (btn as HTMLElement).dataset.tab as Tab
         if (tab === currentTab) {
             btn.classList.add('active')
         } else {
             btn.classList.remove('active')
+        }
+
+        let badge = btn.querySelector('.tab-count')
+        const count = counts[tab]
+        if (count > 0) {
+            if (!badge) {
+                badge = document.createElement('span')
+                badge.className = 'tab-count'
+                btn.appendChild(badge)
+            }
+            badge.textContent = count.toString()
+        } else if (badge) {
+            badge.remove()
         }
     })
 
