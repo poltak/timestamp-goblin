@@ -5,6 +5,7 @@ import {
     MAX_POPUP_ITEMS,
     MIN_RESUME_SECONDS,
 } from './constants'
+import { getThumbnailUrl } from './youtube'
 
 type Tab = 'unfinished' | 'unwatched' | 'finished'
 
@@ -100,20 +101,28 @@ function render(): void {
             const channel = item.channel || 'Unknown channel'
             const lastPercent = formatPercent(item.t, item.duration)
             const furthestPercent = formatPercent(item.ft, item.duration)
+            const thumb = getThumbnailUrl(item.videoId)
             return `
         <div class="card" data-video-id="${item.videoId}">
-          <div class="title">${escapeHtml(title)}</div>
-          <div class="meta">
-            <span class="channel">${escapeHtml(channel)}</span>
-            <div class="percents">
-              <span class="percent last" title="Last watched">L: ${lastPercent}</span>
-              <span class="percent-sep">|</span>
-              <span class="percent furthest" title="Furthest watched">F: ${furthestPercent}</span>
+          <div class="card-content">
+            <div class="thumbnail">
+              <img src="${thumb}" alt="" loading="lazy">
             </div>
-          </div>
-          <div class="bar" title="Last: ${lastPercent}, Furthest: ${furthestPercent}">
-            <div class="fill furthest" style="width: ${furthestPercent}"></div>
-            <div class="fill last" style="width: ${lastPercent}"></div>
+            <div class="info">
+              <div class="title">${escapeHtml(title)}</div>
+              <div class="meta">
+                <span class="channel">${escapeHtml(channel)}</span>
+                <div class="percents">
+                  <span class="percent last" title="Last watched">L: ${lastPercent}</span>
+                  <span class="percent-sep">|</span>
+                  <span class="percent furthest" title="Furthest watched">F: ${furthestPercent}</span>
+                </div>
+              </div>
+              <div class="bar" title="Last: ${lastPercent}, Furthest: ${furthestPercent}">
+                <div class="fill furthest" style="width: ${furthestPercent}"></div>
+                <div class="fill last" style="width: ${lastPercent}"></div>
+              </div>
+            </div>
           </div>
           <div class="actions">
             <button class="action-btn last-btn" title="Watch from last watched time" data-video-id="${item.videoId}" data-time="${item.t}">

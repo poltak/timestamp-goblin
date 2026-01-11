@@ -1,3 +1,7 @@
+export function getThumbnailUrl(videoId: string): string {
+    return `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
+}
+
 export function isWatchPage(): boolean {
     return location.pathname === '/watch'
 }
