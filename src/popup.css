@@ -181,6 +181,59 @@ main::-webkit-scrollbar-thumb:hover {
     gap: 12px;
 }
 
+.ignored {
+    background: var(--card);
+    border: 1px solid var(--stroke);
+    border-radius: 10px;
+    padding: 8px 10px;
+    margin-bottom: 12px;
+}
+
+.ignored-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+}
+
+.ignored-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ignored-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: var(--bar-bg);
+    color: var(--ink);
+    font-size: 11px;
+    border: 1px solid var(--stroke);
+}
+
+.ignored-empty {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.ignored-remove {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+}
+
+.ignored-remove:hover {
+    color: var(--accent);
+}
+
 .card {
     position: relative;
     width: 100%;
@@ -280,6 +333,12 @@ main::-webkit-scrollbar-thumb:hover {
     background: #fef2f2;
 }
 
+.action-btn.ignore-btn:hover {
+    border-color: #f59f00;
+    color: #f59f00;
+    background: #fff4d6;
+}
+
 @media (prefers-color-scheme: dark) {
     .action-btn {
         background: #2a2a2a;
@@ -292,6 +351,11 @@ main::-webkit-scrollbar-thumb:hover {
         border-color: #f87171;
         color: #f87171;
         background: #450a0a;
+    }
+    .action-btn.ignore-btn:hover {
+        border-color: #fbbf24;
+        color: #fbbf24;
+        background: #3a2a0a;
     }
 }
 

@@ -1,7 +1,15 @@
-import { getAllVideoStates, deleteVideoState } from './storage'
+import {
+    addIgnoredChannel,
+    deleteVideoState,
+    getAllVideoStates,
+    getIgnoredChannels,
+    normalizeChannelName,
+    removeIgnoredChannel,
+} from './storage'
 import type { StoredVideoState, VideoItem } from './types'
 import {
     DEFAULT_UNFINISHED_BUFFER_SECONDS,
+    DEFAULT_CHANNEL_NAME,
     MAX_POPUP_ITEMS,
     MIN_RESUME_SECONDS,
 } from './constants'
@@ -11,6 +19,7 @@ type Tab = 'unfinished' | 'unwatched' | 'finished'
 
 let currentTab: Tab = 'unfinished'
 let allVideos: VideoItem[] = []
+let ignoredChannels: string[] = []
 
 function categorizeVideo(state: StoredVideoState): Tab {
     if (!Number.isFinite(state.duration)) {
@@ -47,11 +56,18 @@ function openVideo(videoId: string, time?: number): void {
 function render(): void {
     const root = document.getElementById('list')
     const empty = document.getElementById('empty')
+    const ignoredRoot = document.getElementById('ignored-list')
     if (!root || !empty) {
         return
     }
 
-    const items = allVideos
+    const ignoredSet = new Set(ignoredChannels)
+    const visibleVideos = allVideos.filter((v) => {
+        const channel = v.channel || DEFAULT_CHANNEL_NAME
+        return !ignoredSet.has(normalizeChannelName(channel))
+    })
+
+    const items = visibleVideos
         .filter((v) => categorizeVideo(v) === currentTab)
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(0, MAX_POPUP_ITEMS)
@@ -61,7 +77,7 @@ function render(): void {
         unwatched: 0,
         finished: 0,
     }
-    allVideos.forEach((v) => {
+    visibleVideos.forEach((v) => {
         counts[categorizeVideo(v)]++
     })
 
@@ -91,17 +107,18 @@ function render(): void {
         root.innerHTML = ''
         empty.classList.remove('hidden')
         empty.textContent = `No ${currentTab} videos yet.`
-        return
+    } else {
+        empty.classList.add('hidden')
     }
 
-    empty.classList.add('hidden')
     root.innerHTML = items
         .map((item) => {
             const title = item.title || 'Untitled video'
-            const channel = item.channel || 'Unknown channel'
+            const channel = item.channel || DEFAULT_CHANNEL_NAME
             const lastPercent = formatPercent(item.t, item.duration)
             const furthestPercent = formatPercent(item.ft, item.duration)
             const thumb = getThumbnailUrl(item.videoId)
+            const canIgnore = channel !== DEFAULT_CHANNEL_NAME
             return `
         <div class="card" data-video-id="${item.videoId}">
           <div class="card-content">
@@ -134,6 +151,14 @@ function render(): void {
               <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="13 19 22 12 13 5 13 19"></polygon>
                 <polygon points="2 19 11 12 2 5 2 19"></polygon>
+              </svg>
+            </button>
+            <button class="action-btn ignore-btn" title="Ignore channel" data-channel="${escapeHtml(channel)}" ${
+                canIgnore ? '' : 'disabled'
+            }>
+              <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="4.9" y1="4.9" x2="19.1" y2="19.1"></line>
               </svg>
             </button>
             <button class="action-btn delete-btn" title="Remove from list" data-video-id="${item.videoId}">
@@ -197,6 +222,51 @@ function render(): void {
             })
         },
     )
+
+    root.querySelectorAll<HTMLButtonElement>('button.ignore-btn').forEach(
+        (btn) => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation()
+                const channel = btn.dataset.channel
+                if (channel) {
+                    await addIgnoredChannel(channel)
+                    await refreshData()
+                }
+            })
+        },
+    )
+
+    if (ignoredRoot) {
+        if (ignoredChannels.length === 0) {
+            ignoredRoot.innerHTML = `<div class="ignored-empty">None</div>`
+        } else {
+            ignoredRoot.innerHTML = ignoredChannels
+                .slice()
+                .sort()
+                .map(
+                    (channel) => `
+            <span class="ignored-pill" data-channel="${escapeHtml(channel)}">
+              <span class="ignored-name">${escapeHtml(channel)}</span>
+              <button class="ignored-remove" title="Stop ignoring" data-channel="${escapeHtml(channel)}">×</button>
+            </span>
+          `,
+                )
+                .join('')
+
+            ignoredRoot
+                .querySelectorAll<HTMLButtonElement>('button.ignored-remove')
+                .forEach((btn) => {
+                    btn.addEventListener('click', async (e) => {
+                        e.stopPropagation()
+                        const channel = btn.dataset.channel
+                        if (channel) {
+                            await removeIgnoredChannel(channel)
+                            await refreshData()
+                        }
+                    })
+                })
+        }
+    }
 }
 
 function escapeHtml(value: string): string {
@@ -207,6 +277,7 @@ function escapeHtml(value: string): string {
 
 async function refreshData(): Promise<void> {
     allVideos = await getAllVideoStates()
+    ignoredChannels = await getIgnoredChannels()
     render()
 }
 

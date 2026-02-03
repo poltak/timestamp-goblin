@@ -1,6 +1,7 @@
 import type { StoredVideoState, VideoItem } from './types'
 
 const VIDEO_KEY_PREFIX = 'ytp:'
+const IGNORED_CHANNELS_KEY = 'ignored:channels'
 
 function keyFor(videoId: string): string {
     return `${VIDEO_KEY_PREFIX}${videoId}`
@@ -20,6 +21,10 @@ function isValidState(state?: StoredVideoState): boolean {
         typeof state.t === 'number' &&
         typeof state.updatedAt === 'number'
     )
+}
+
+export function normalizeChannelName(name: string): string {
+    return name.trim().toLowerCase()
 }
 
 export async function getAllVideoStates(): Promise<VideoItem[]> {
@@ -64,4 +69,40 @@ export async function setVideoState(
 export async function deleteVideoState(videoId: string): Promise<void> {
     const key = keyFor(videoId)
     await chrome.storage.local.remove(key)
+}
+
+export async function getIgnoredChannels(): Promise<string[]> {
+    const result = await chrome.storage.local.get(IGNORED_CHANNELS_KEY)
+    const value = result[IGNORED_CHANNELS_KEY]
+    if (!Array.isArray(value)) {
+        return []
+    }
+    return value.filter((item): item is string => typeof item === 'string')
+}
+
+export async function addIgnoredChannel(name: string): Promise<string[]> {
+    const normalized = normalizeChannelName(name)
+    if (!normalized) {
+        return getIgnoredChannels()
+    }
+    const existing = await getIgnoredChannels()
+    if (existing.includes(normalized)) {
+        return existing
+    }
+    const next = [...existing, normalized]
+    await chrome.storage.local.set({ [IGNORED_CHANNELS_KEY]: next })
+    return next
+}
+
+export async function removeIgnoredChannel(name: string): Promise<string[]> {
+    const normalized = normalizeChannelName(name)
+    if (!normalized) {
+        return getIgnoredChannels()
+    }
+    const existing = await getIgnoredChannels()
+    const next = existing.filter((item) => item !== normalized)
+    if (next.length !== existing.length) {
+        await chrome.storage.local.set({ [IGNORED_CHANNELS_KEY]: next })
+    }
+    return next
 }

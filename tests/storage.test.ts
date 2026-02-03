@@ -90,6 +90,21 @@ describe('storage', () => {
         expect(all[0].videoId).toBe('ok')
     })
 
+    it('manages ignored channel list', async () => {
+        const { addIgnoredChannel, getIgnoredChannels, removeIgnoredChannel } =
+            await import('../src/storage')
+        expect(await getIgnoredChannels()).toEqual([])
+
+        await addIgnoredChannel('  My Channel ')
+        expect(await getIgnoredChannels()).toEqual(['my channel'])
+
+        await addIgnoredChannel('My Channel')
+        expect(await getIgnoredChannels()).toEqual(['my channel'])
+
+        await removeIgnoredChannel('MY CHANNEL')
+        expect(await getIgnoredChannels()).toEqual([])
+    })
+
     it('deletes state', async () => {
         await setVideoState('gone', {
             t: 1,

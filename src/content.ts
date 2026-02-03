@@ -1,5 +1,10 @@
 import { watchUrlChanges, type UrlChangeHandler } from './spa'
-import { getVideoState, setVideoState } from './storage'
+import {
+    getIgnoredChannels,
+    getVideoState,
+    normalizeChannelName,
+    setVideoState,
+} from './storage'
 import {
     clampResumeTarget,
     getChannelName,
@@ -93,6 +98,15 @@ export function isSafeToSave(video: HTMLVideoElement): boolean {
     return true
 }
 
+async function isIgnoredChannel(name: string): Promise<boolean> {
+    const normalized = normalizeChannelName(name)
+    if (!normalized) {
+        return false
+    }
+    const ignored = await getIgnoredChannels()
+    return ignored.includes(normalized)
+}
+
 export async function saveNow(reason: string): Promise<void> {
     const videoId = activeVideoId
     const video = activeVideo
@@ -108,7 +122,6 @@ export async function saveNow(reason: string): Promise<void> {
         return
     }
 
-    lastWriteAt = now
     const duration =
         Number.isFinite(video.duration) && video.duration > 0
             ? video.duration
@@ -116,6 +129,12 @@ export async function saveNow(reason: string): Promise<void> {
     const title = getVideoTitle() ?? DEFAULT_VIDEO_TITLE
     const channel = getChannelName() ?? DEFAULT_CHANNEL_NAME
 
+    if (await isIgnoredChannel(channel)) {
+        log('not saving (ignored channel)', { videoId, channel })
+        return
+    }
+
+    lastWriteAt = now
     currentFurthestTime = Math.max(currentFurthestTime, video.currentTime)
 
     const payload: StoredVideoState = {
@@ -172,6 +191,12 @@ export async function tryResume(
     videoId: string,
     token: number,
 ): Promise<void> {
+    const channel = getChannelName() ?? DEFAULT_CHANNEL_NAME
+    if (await isIgnoredChannel(channel)) {
+        log('not resuming (ignored channel)', { videoId, channel })
+        return
+    }
+
     const state = await getVideoState(videoId)
     if (token !== initToken) {
         return

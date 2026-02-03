@@ -4,6 +4,8 @@ import { MIN_RESUME_SECONDS, NEAR_START_WINDOW_SECONDS } from '../src/constants'
 const storageMocks = {
     getVideoState: vi.fn(async () => null),
     setVideoState: vi.fn(async () => {}),
+    getIgnoredChannels: vi.fn(async () => []),
+    normalizeChannelName: (value: string) => value.trim().toLowerCase(),
 }
 
 const youtubeMocks = {
@@ -32,6 +34,8 @@ describe('content script', () => {
         vi.setSystemTime(new Date('2020-01-01T00:00:00Z'))
         storageMocks.getVideoState.mockReset()
         storageMocks.setVideoState.mockReset()
+        storageMocks.getIgnoredChannels.mockReset()
+        storageMocks.getIgnoredChannels.mockResolvedValue([])
         youtubeMocks.isWatchPage.mockReturnValue(true)
         youtubeMocks.getVideoId.mockReturnValue('vid1')
         youtubeMocks.isLiveVideo.mockReturnValue(false)
@@ -59,6 +63,30 @@ describe('content script', () => {
         expect(payload.ft).toBe(42)
         expect(payload.title).toBe('Title')
         expect(payload.channel).toBe('Channel')
+    })
+
+    it('skips saving and resuming for ignored channels', async () => {
+        const mod = await import('../src/content')
+        const video = document.createElement('video')
+        Object.defineProperty(video, 'currentTime', { value: 42, writable: true })
+        Object.defineProperty(video, 'duration', { value: 100 })
+
+        storageMocks.getIgnoredChannels.mockResolvedValue(['channel'])
+        youtubeMocks.getChannelName.mockReturnValue('Channel')
+        mod.__testing.setActive('vid1', video)
+        await mod.saveNow('test')
+        expect(storageMocks.setVideoState).not.toHaveBeenCalled()
+
+        storageMocks.getVideoState.mockResolvedValue({
+            t: 50,
+            ft: 60,
+            updatedAt: 1,
+            duration: 100,
+            title: 'Title',
+            channel: 'Channel',
+        })
+        await mod.tryResume(video, 'vid1', mod.__testing.getState().initToken)
+        expect(video.currentTime).toBe(42)
     })
 
     it('skips saving when conditions fail', async () => {

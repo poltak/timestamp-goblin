@@ -30,12 +30,27 @@ const seedVideos = [
     },
 ]
 let videos = [...seedVideos]
+let ignored: string[] = []
 
 vi.mock('../src/storage', () => ({
     getAllVideoStates: vi.fn(async () => videos),
     deleteVideoState: vi.fn(async (id: string) => {
         videos = videos.filter((v) => v.videoId !== id)
     }),
+    getIgnoredChannels: vi.fn(async () => ignored),
+    addIgnoredChannel: vi.fn(async (channel: string) => {
+        const next = channel.trim().toLowerCase()
+        if (!ignored.includes(next)) {
+            ignored = [...ignored, next]
+        }
+        return ignored
+    }),
+    removeIgnoredChannel: vi.fn(async (channel: string) => {
+        const next = channel.trim().toLowerCase()
+        ignored = ignored.filter((item) => item !== next)
+        return ignored
+    }),
+    normalizeChannelName: (value: string) => value.trim().toLowerCase(),
 }))
 
 vi.mock('../src/youtube', () => ({
@@ -53,11 +68,16 @@ describe('popup', () => {
         </nav>
       </header>
       <main>
+        <section class="ignored">
+          <div class="ignored-title">Ignored channels</div>
+          <div id="ignored-list" class="ignored-list"></div>
+        </section>
         <div id="empty" class="empty hidden"></div>
         <div id="list" class="list"></div>
       </main>
     `
         videos = [...seedVideos]
+        ignored = []
         vi.resetModules()
         await import('../src/popup')
         document.dispatchEvent(new Event('DOMContentLoaded'))
@@ -109,10 +129,15 @@ describe('popup', () => {
         </nav>
       </header>
       <main>
+        <section class="ignored">
+          <div class="ignored-title">Ignored channels</div>
+          <div id="ignored-list" class="ignored-list"></div>
+        </section>
         <div id="empty" class="empty hidden"></div>
         <div id="list" class="list"></div>
       </main>
     `
+        ignored = []
         videos = [
             {
                 videoId: 'x1',
@@ -136,13 +161,32 @@ describe('popup', () => {
         vi.resetModules()
         await import('../src/popup')
         document.dispatchEvent(new Event('DOMContentLoaded'))
-        await Promise.resolve()
+        await new Promise((resolve) => setTimeout(resolve, 0))
 
         const titles = Array.from(
             document.querySelectorAll('.card .title'),
         ).map((el) => el.textContent)
         expect(titles[0]).toBe('New')
         expect(titles[1]).toBe('Old')
+    })
+
+    it('ignores a channel and updates the ignored list', async () => {
+        const ignoreBtn = document.querySelector<HTMLButtonElement>(
+            'button.ignore-btn',
+        )
+        ignoreBtn?.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        const cards = document.querySelectorAll('.card')
+        expect(cards).toHaveLength(0)
+        const ignoredList = document.getElementById('ignored-list')
+        expect(ignoredList?.textContent).toContain('chan a')
+
+        const tabs = document.querySelectorAll<HTMLButtonElement>('.tab-btn')
+        const counts = Array.from(tabs).map((tab) =>
+            tab.querySelector('.tab-count')?.textContent,
+        )
+        expect(counts).toEqual([undefined, '1', '1'])
     })
 
     it('opens videos on card or buttons', () => {
