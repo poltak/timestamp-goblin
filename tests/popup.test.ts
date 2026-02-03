@@ -31,11 +31,16 @@ const seedVideos = [
 ]
 let videos = [...seedVideos]
 let ignored: string[] = []
+let enabled = true
 
 vi.mock('../src/storage', () => ({
     getAllVideoStates: vi.fn(async () => videos),
     deleteVideoState: vi.fn(async (id: string) => {
         videos = videos.filter((v) => v.videoId !== id)
+    }),
+    getEnabled: vi.fn(async () => enabled),
+    setEnabled: vi.fn(async (value: boolean) => {
+        enabled = value
     }),
     getIgnoredChannels: vi.fn(async () => ignored),
     addIgnoredChannel: vi.fn(async (channel: string) => {
@@ -58,9 +63,16 @@ vi.mock('../src/youtube', () => ({
 }))
 
 describe('popup', () => {
-    beforeEach(async () => {
+    const setBaseDom = () => {
         document.body.innerHTML = `
       <header>
+        <div class="banner-actions">
+          <label class="toggle toggle-compact">
+            <input id="toggle-enabled" type="checkbox" checked />
+            <span class="toggle-ui" aria-hidden="true"></span>
+            <span class="toggle-text">Auto-saving</span>
+          </label>
+        </div>
         <nav class="tabs">
           <button class="tab-btn active" data-tab="unfinished">Unfinished</button>
           <button class="tab-btn" data-tab="unwatched">Unwatched</button>
@@ -76,8 +88,13 @@ describe('popup', () => {
         <div id="list" class="list"></div>
       </main>
     `
+    }
+
+    beforeEach(async () => {
+        setBaseDom()
         videos = [...seedVideos]
         ignored = []
+        enabled = true
         vi.resetModules()
         await import('../src/popup')
         document.dispatchEvent(new Event('DOMContentLoaded'))
@@ -120,23 +137,7 @@ describe('popup', () => {
     })
 
     it('sorts items by updatedAt descending', async () => {
-        document.body.innerHTML = `
-      <header>
-        <nav class="tabs">
-          <button class="tab-btn active" data-tab="unfinished">Unfinished</button>
-          <button class="tab-btn" data-tab="unwatched">Unwatched</button>
-          <button class="tab-btn" data-tab="finished">Finished</button>
-        </nav>
-      </header>
-      <main>
-        <section class="ignored">
-          <div class="ignored-title">Ignored channels</div>
-          <div id="ignored-list" class="ignored-list"></div>
-        </section>
-        <div id="empty" class="empty hidden"></div>
-        <div id="list" class="list"></div>
-      </main>
-    `
+        setBaseDom()
         ignored = []
         videos = [
             {
@@ -187,6 +188,24 @@ describe('popup', () => {
             tab.querySelector('.tab-count')?.textContent,
         )
         expect(counts).toEqual([undefined, '1', '1'])
+    })
+
+    it('toggles enabled state', async () => {
+        setBaseDom()
+        vi.resetModules()
+        await import('../src/popup')
+        document.dispatchEvent(new Event('DOMContentLoaded'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        const toggle = document.getElementById(
+            'toggle-enabled',
+        ) as HTMLInputElement
+        expect(toggle.checked).toBe(true)
+        toggle.checked = false
+        toggle.dispatchEvent(new Event('change'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(enabled).toBe(false)
+        expect(document.body.classList.contains('is-disabled')).toBe(true)
     })
 
     it('opens videos on card or buttons', () => {

@@ -6,6 +6,7 @@ const storageMocks = {
     setVideoState: vi.fn(async () => {}),
     getIgnoredChannels: vi.fn(async () => []),
     normalizeChannelName: (value: string) => value.trim().toLowerCase(),
+    getEnabled: vi.fn(async () => true),
 }
 
 const youtubeMocks = {
@@ -36,6 +37,8 @@ describe('content script', () => {
         storageMocks.setVideoState.mockReset()
         storageMocks.getIgnoredChannels.mockReset()
         storageMocks.getIgnoredChannels.mockResolvedValue([])
+        storageMocks.getEnabled.mockReset()
+        storageMocks.getEnabled.mockResolvedValue(true)
         youtubeMocks.isWatchPage.mockReturnValue(true)
         youtubeMocks.getVideoId.mockReturnValue('vid1')
         youtubeMocks.isLiveVideo.mockReturnValue(false)
@@ -73,6 +76,29 @@ describe('content script', () => {
 
         storageMocks.getIgnoredChannels.mockResolvedValue(['channel'])
         youtubeMocks.getChannelName.mockReturnValue('Channel')
+        mod.__testing.setActive('vid1', video)
+        await mod.saveNow('test')
+        expect(storageMocks.setVideoState).not.toHaveBeenCalled()
+
+        storageMocks.getVideoState.mockResolvedValue({
+            t: 50,
+            ft: 60,
+            updatedAt: 1,
+            duration: 100,
+            title: 'Title',
+            channel: 'Channel',
+        })
+        await mod.tryResume(video, 'vid1', mod.__testing.getState().initToken)
+        expect(video.currentTime).toBe(42)
+    })
+
+    it('skips saving and resuming when disabled', async () => {
+        const mod = await import('../src/content')
+        const video = document.createElement('video')
+        Object.defineProperty(video, 'currentTime', { value: 42, writable: true })
+        Object.defineProperty(video, 'duration', { value: 100 })
+
+        storageMocks.getEnabled.mockResolvedValue(false)
         mod.__testing.setActive('vid1', video)
         await mod.saveNow('test')
         expect(storageMocks.setVideoState).not.toHaveBeenCalled()

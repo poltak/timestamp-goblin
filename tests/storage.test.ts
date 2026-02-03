@@ -105,6 +105,13 @@ describe('storage', () => {
         expect(await getIgnoredChannels()).toEqual([])
     })
 
+    it('defaults enabled to true and can toggle', async () => {
+        const { getEnabled, setEnabled } = await import('../src/storage')
+        expect(await getEnabled()).toBe(true)
+        await setEnabled(false)
+        expect(await getEnabled()).toBe(false)
+    })
+
     it('deletes state', async () => {
         await setVideoState('gone', {
             t: 1,

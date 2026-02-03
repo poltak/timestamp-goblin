@@ -2,6 +2,7 @@ import type { StoredVideoState, VideoItem } from './types'
 
 const VIDEO_KEY_PREFIX = 'ytp:'
 const IGNORED_CHANNELS_KEY = 'ignored:channels'
+const ENABLED_KEY = 'enabled'
 
 function keyFor(videoId: string): string {
     return `${VIDEO_KEY_PREFIX}${videoId}`
@@ -78,6 +79,19 @@ export async function getIgnoredChannels(): Promise<string[]> {
         return []
     }
     return value.filter((item): item is string => typeof item === 'string')
+}
+
+export async function getEnabled(): Promise<boolean> {
+    const result = await chrome.storage.local.get(ENABLED_KEY)
+    const value = result[ENABLED_KEY]
+    if (typeof value === 'boolean') {
+        return value
+    }
+    return true
+}
+
+export async function setEnabled(enabled: boolean): Promise<void> {
+    await chrome.storage.local.set({ [ENABLED_KEY]: enabled })
 }
 
 export async function addIgnoredChannel(name: string): Promise<string[]> {

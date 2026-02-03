@@ -1,6 +1,7 @@
 import { watchUrlChanges, type UrlChangeHandler } from './spa'
 import {
     getIgnoredChannels,
+    getEnabled,
     getVideoState,
     normalizeChannelName,
     setVideoState,
@@ -122,6 +123,11 @@ export async function saveNow(reason: string): Promise<void> {
         return
     }
 
+    if (!(await getEnabled())) {
+        log('not saving (disabled)')
+        return
+    }
+
     const duration =
         Number.isFinite(video.duration) && video.duration > 0
             ? video.duration
@@ -191,6 +197,11 @@ export async function tryResume(
     videoId: string,
     token: number,
 ): Promise<void> {
+    if (!(await getEnabled())) {
+        log('not resuming (disabled)', { videoId })
+        return
+    }
+
     const channel = getChannelName() ?? DEFAULT_CHANNEL_NAME
     if (await isIgnoredChannel(channel)) {
         log('not resuming (ignored channel)', { videoId, channel })
@@ -303,6 +314,9 @@ function onBeforeUnload(): void {
 }
 
 export function initContentScript(): void {
+    if (document.documentElement.dataset.timestampGoblinDisabled === 'true') {
+        return
+    }
     if (hasInit) {
         return
     }

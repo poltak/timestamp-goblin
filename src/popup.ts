@@ -1,10 +1,12 @@
 import {
     addIgnoredChannel,
     deleteVideoState,
+    getEnabled,
     getAllVideoStates,
     getIgnoredChannels,
     normalizeChannelName,
     removeIgnoredChannel,
+    setEnabled,
 } from './storage'
 import type { StoredVideoState, VideoItem } from './types'
 import {
@@ -20,6 +22,7 @@ type Tab = 'unfinished' | 'unwatched' | 'finished'
 let currentTab: Tab = 'unfinished'
 let allVideos: VideoItem[] = []
 let ignoredChannels: string[] = []
+let enabled = true
 
 function categorizeVideo(state: StoredVideoState): Tab {
     if (!Number.isFinite(state.duration)) {
@@ -57,9 +60,17 @@ function render(): void {
     const root = document.getElementById('list')
     const empty = document.getElementById('empty')
     const ignoredRoot = document.getElementById('ignored-list')
+    const enabledToggle = document.getElementById(
+        'toggle-enabled',
+    ) as HTMLInputElement | null
     if (!root || !empty) {
         return
     }
+
+    if (enabledToggle) {
+        enabledToggle.checked = enabled
+    }
+    document.body.classList.toggle('is-disabled', !enabled)
 
     const ignoredSet = new Set(ignoredChannels)
     const visibleVideos = allVideos.filter((v) => {
@@ -278,6 +289,7 @@ function escapeHtml(value: string): string {
 async function refreshData(): Promise<void> {
     allVideos = await getAllVideoStates()
     ignoredChannels = await getIgnoredChannels()
+    enabled = await getEnabled()
     render()
 }
 
@@ -289,6 +301,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             render()
         })
     })
+
+    const toggle = document.getElementById(
+        'toggle-enabled',
+    ) as HTMLInputElement | null
+    if (toggle) {
+        toggle.addEventListener('change', async () => {
+            enabled = toggle.checked
+            await setEnabled(enabled)
+            render()
+        })
+    }
 
     await refreshData()
 })
