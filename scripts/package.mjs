@@ -14,10 +14,14 @@ try {
 await rm(zipPath, { force: true })
 
 await new Promise((resolvePromise, rejectPromise) => {
-    const proc = spawn('zip', ['-r', zipPath, '.'], {
+    const proc = spawn(
+        'zip',
+        ['-X', '-r', zipPath, '.', '-x', '*.DS_Store', '-x', '__MACOSX/*'],
+        {
         cwd: distDir,
         stdio: 'inherit',
-    })
+        },
+    )
     proc.on('exit', (code) => {
         if (code === 0) {
             resolvePromise(null)
