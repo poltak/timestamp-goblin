@@ -1,0 +1,8 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "noEmit": true,
+        "types": ["vitest/globals", "chrome-types", "./env.d.ts"]
+    },
+    "include": ["src", "tests", "vitest.config.ts"]
+}

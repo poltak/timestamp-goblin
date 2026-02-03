@@ -30,6 +30,9 @@ let initToken = 0
 let waitHandle: ReturnType<typeof waitForVideoElement> | null = null
 let resumeReapplyId: number | null = null
 let currentFurthestTime = 0
+let unwatchUrlChanges: (() => void) | null = null
+let hasInit = false
+let beforeUnloadAttached = false
 
 if (DEBUG) {
     globalThis['getState'] = () => ({
@@ -43,7 +46,7 @@ if (DEBUG) {
     })
 }
 
-function teardown(): void {
+export function teardown(): void {
     initToken += 1
 
     if (saveIntervalId !== null) {
@@ -73,7 +76,7 @@ function teardown(): void {
     currentFurthestTime = 0
 }
 
-function isSafeToSave(video: HTMLVideoElement): boolean {
+export function isSafeToSave(video: HTMLVideoElement): boolean {
     if (!isWatchPage()) {
         return false
     }
@@ -90,7 +93,7 @@ function isSafeToSave(video: HTMLVideoElement): boolean {
     return true
 }
 
-async function saveNow(reason: string): Promise<void> {
+export async function saveNow(reason: string): Promise<void> {
     const videoId = activeVideoId
     const video = activeVideo
     const now = Date.now()
@@ -128,16 +131,16 @@ async function saveNow(reason: string): Promise<void> {
     await setVideoState(videoId, payload)
 }
 
-function onPause(): void {
+export function onPause(): void {
     void saveNow('pause')
     stopSavingLoop()
 }
 
-function onPlay(): void {
+export function onPlay(): void {
     startSavingLoop()
 }
 
-function onVisibilityChange(): void {
+export function onVisibilityChange(): void {
     if (document.hidden) {
         void saveNow('hidden')
         stopSavingLoop()
@@ -146,7 +149,7 @@ function onVisibilityChange(): void {
     }
 }
 
-function stopSavingLoop(): void {
+export function stopSavingLoop(): void {
     if (saveIntervalId !== null) {
         log('stop saving loop')
         window.clearInterval(saveIntervalId)
@@ -154,7 +157,7 @@ function stopSavingLoop(): void {
     }
 }
 
-function startSavingLoop(): void {
+export function startSavingLoop(): void {
     if (saveIntervalId !== null) {
         return
     }
@@ -164,7 +167,7 @@ function startSavingLoop(): void {
     }, SAVE_INTERVAL_SECONDS * 1000)
 }
 
-async function tryResume(
+export async function tryResume(
     video: HTMLVideoElement,
     videoId: string,
     token: number,
@@ -205,7 +208,7 @@ async function tryResume(
     }, 500)
 }
 
-async function initForVideo(videoId: string): Promise<void> {
+export async function initForVideo(videoId: string): Promise<void> {
     const token = ++initToken
     log('init', videoId)
 
@@ -242,7 +245,7 @@ async function initForVideo(videoId: string): Promise<void> {
     }
 }
 
-const handleUrlChange: UrlChangeHandler = () => {
+export const handleUrlChange: UrlChangeHandler = () => {
     const nextVideoId = getVideoId()
     log('url change', { nextVideoId, activeVideoId })
     if (nextVideoId === activeVideoId) {
@@ -258,14 +261,64 @@ const handleUrlChange: UrlChangeHandler = () => {
 
 const debouncedHandleUrlChange = debounce(handleUrlChange, 150)
 
-const unwatchUrlChanges = watchUrlChanges(debouncedHandleUrlChange, {
-    debounceMs: 0,
-})
-window.addEventListener('yt-navigate-finish', debouncedHandleUrlChange)
-handleUrlChange()
+function cleanupGlobalListeners(): void {
+    if (unwatchUrlChanges) {
+        unwatchUrlChanges()
+        unwatchUrlChanges = null
+    }
+    if (beforeUnloadAttached) {
+        window.removeEventListener('yt-navigate-finish', debouncedHandleUrlChange)
+        window.removeEventListener('beforeunload', onBeforeUnload)
+        beforeUnloadAttached = false
+    }
+}
 
-// TODO: some way to disable the ext behavior
-window.addEventListener('beforeunload', () => {
-    unwatchUrlChanges()
-    window.removeEventListener('yt-navigate-finish', debouncedHandleUrlChange)
-})
+function onBeforeUnload(): void {
+    cleanupGlobalListeners()
+}
+
+export function initContentScript(): void {
+    if (hasInit) {
+        return
+    }
+    hasInit = true
+    unwatchUrlChanges = watchUrlChanges(debouncedHandleUrlChange, {
+        debounceMs: 0,
+    })
+    window.addEventListener('yt-navigate-finish', debouncedHandleUrlChange)
+    window.addEventListener('beforeunload', onBeforeUnload)
+    beforeUnloadAttached = true
+    handleUrlChange()
+}
+
+initContentScript()
+
+export const __testing = {
+    getState: () => ({
+        activeVideo,
+        activeVideoId,
+        lastWriteAt,
+        initToken,
+        waitHandle,
+        resumeReapplyId,
+        saveIntervalId,
+        currentFurthestTime,
+        hasInit,
+    }),
+    setActive: (videoId: string | null, video: HTMLVideoElement | null) => {
+        activeVideoId = videoId
+        activeVideo = video
+    },
+    setLastWriteAt: (value: number) => {
+        lastWriteAt = value
+    },
+    setInitToken: (value: number) => {
+        initToken = value
+    },
+    resetForTests: () => {
+        teardown()
+        cleanupGlobalListeners()
+        hasInit = false
+        beforeUnloadAttached = false
+    },
+}

@@ -10,5 +10,6 @@
         "noImplicitAny": false,
         "types": ["chrome-types", "./env.d.ts"]
     },
-    "include": ["src"]
+    "include": ["src"],
+    "exclude": ["tests", "vitest.config.ts", "tests/**/*.ts"]
 }
