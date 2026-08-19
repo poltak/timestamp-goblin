@@ -12,10 +12,13 @@ import type { StoredVideoState, VideoItem } from './types'
 import {
     DEFAULT_UNFINISHED_BUFFER_SECONDS,
     DEFAULT_CHANNEL_NAME,
+    DEFAULT_VIDEO_TITLE,
     MAX_POPUP_ITEMS,
     MIN_RESUME_SECONDS,
 } from './constants'
+import { buildVideoSearchIndex, findVideoIds } from './search'
 import { getThumbnailUrl } from './youtube'
+import type { VideoSearchIndex } from './search'
 
 type Tab = 'unfinished' | 'unwatched' | 'finished'
 
@@ -23,6 +26,8 @@ let currentTab: Tab = 'unfinished'
 let allVideos: VideoItem[] = []
 let ignoredChannels: string[] = []
 let enabled = true
+let searchQuery = ''
+let videoSearchIndex: VideoSearchIndex | null = null
 
 function categorizeVideo(state: StoredVideoState): Tab {
     if (!Number.isFinite(state.duration)) {
@@ -60,6 +65,9 @@ function render(): void {
     const root = document.getElementById('list')
     const empty = document.getElementById('empty')
     const ignoredRoot = document.getElementById('ignored-list')
+    const searchInput = document.getElementById(
+        'video-search',
+    ) as HTMLInputElement | null
     const enabledToggle = document.getElementById(
         'toggle-enabled',
     ) as HTMLInputElement | null
@@ -70,6 +78,9 @@ function render(): void {
     if (enabledToggle) {
         enabledToggle.checked = enabled
     }
+    if (searchInput && searchInput.value !== searchQuery) {
+        searchInput.value = searchQuery
+    }
     document.body.classList.toggle('is-disabled', !enabled)
 
     const ignoredSet = new Set(ignoredChannels)
@@ -78,7 +89,18 @@ function render(): void {
         return !ignoredSet.has(normalizeChannelName(channel))
     })
 
-    const items = visibleVideos
+    const normalizedSearchQuery = searchQuery.trim()
+    const matchingVideoIds =
+        normalizedSearchQuery && videoSearchIndex
+            ? findVideoIds(videoSearchIndex, normalizedSearchQuery)
+            : null
+    const searchedVideos = normalizedSearchQuery
+        ? visibleVideos.filter(
+              (video) => matchingVideoIds?.has(video.videoId) ?? false,
+          )
+        : visibleVideos
+
+    const items = searchedVideos
         .filter((v) => categorizeVideo(v) === currentTab)
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(0, MAX_POPUP_ITEMS)
@@ -117,14 +139,16 @@ function render(): void {
     if (items.length === 0) {
         root.innerHTML = ''
         empty.classList.remove('hidden')
-        empty.textContent = `No ${currentTab} videos yet.`
+        empty.textContent = normalizedSearchQuery
+            ? `No ${currentTab} videos match "${normalizedSearchQuery}".`
+            : `No ${currentTab} videos yet.`
     } else {
         empty.classList.add('hidden')
     }
 
     root.innerHTML = items
         .map((item) => {
-            const title = item.title || 'Untitled video'
+            const title = item.title || DEFAULT_VIDEO_TITLE
             const channel = item.channel || DEFAULT_CHANNEL_NAME
             const lastPercent = formatPercent(item.t, item.duration)
             const furthestPercent = formatPercent(item.ft, item.duration)
@@ -287,9 +311,15 @@ function escapeHtml(value: string): string {
 }
 
 async function refreshData(): Promise<void> {
-    allVideos = await getAllVideoStates()
-    ignoredChannels = await getIgnoredChannels()
-    enabled = await getEnabled()
+    const [nextVideos, nextIgnoredChannels, nextEnabled] = await Promise.all([
+        getAllVideoStates(),
+        getIgnoredChannels(),
+        getEnabled(),
+    ])
+    allVideos = nextVideos
+    videoSearchIndex = buildVideoSearchIndex(allVideos)
+    ignoredChannels = nextIgnoredChannels
+    enabled = nextEnabled
     render()
 }
 
@@ -309,6 +339,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         toggle.addEventListener('change', async () => {
             enabled = toggle.checked
             await setEnabled(enabled)
+            render()
+        })
+    }
+
+    const searchInput = document.getElementById(
+        'video-search',
+    ) as HTMLInputElement | null
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            searchQuery = searchInput.value
             render()
         })
     }

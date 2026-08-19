@@ -328,6 +328,53 @@ main::-webkit-scrollbar-thumb:hover {
     color: var(--muted);
 }
 
+.search {
+    background: var(--card);
+    border: 1px solid var(--stroke);
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 12px;
+}
+
+.search-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.search-input {
+    display: block;
+    width: 100%;
+    margin-top: 6px;
+    padding: 8px 10px;
+    border: 1px solid var(--stroke);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+    color-scheme: light;
+}
+
+.search-input::placeholder {
+    color: var(--muted);
+}
+
+.search-input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-color: var(--accent);
+}
+
+@media (prefers-color-scheme: dark) {
+    .search-input {
+        color-scheme: dark;
+    }
+}
+
 .ignored-remove {
     border: none;
     background: transparent;

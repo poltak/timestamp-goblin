@@ -84,6 +84,10 @@ describe('popup', () => {
           <div class="ignored-title">Ignored channels</div>
           <div id="ignored-list" class="ignored-list"></div>
         </section>
+        <section class="search">
+          <label class="search-label" for="video-search">Search videos</label>
+          <input id="video-search" class="search-input" type="search" />
+        </section>
         <div id="empty" class="empty hidden"></div>
         <div id="list" class="list"></div>
       </main>
@@ -109,14 +113,13 @@ describe('popup', () => {
 
     it('shows tab counts and empty states', async () => {
         const tabs = document.querySelectorAll<HTMLButtonElement>('.tab-btn')
-        const counts = Array.from(tabs).map((tab) =>
-            tab.querySelector('.tab-count')?.textContent,
+        const counts = Array.from(tabs).map(
+            (tab) => tab.querySelector('.tab-count')?.textContent,
         )
         expect(counts).toEqual(['1', '1', '1'])
 
-        const deleteBtn = document.querySelector<HTMLButtonElement>(
-            'button.delete-btn',
-        )
+        const deleteBtn =
+            document.querySelector<HTMLButtonElement>('button.delete-btn')
         deleteBtn?.click()
         await new Promise((resolve) => setTimeout(resolve, 0))
         const empty = document.getElementById('empty')
@@ -134,6 +137,53 @@ describe('popup', () => {
         cards = document.querySelectorAll('.card')
         expect(cards).toHaveLength(1)
         expect(cards[0].textContent).toContain('Finished')
+    })
+
+    it('searches titles and channels with case-insensitive prefixes', () => {
+        const search = document.getElementById(
+            'video-search',
+        ) as HTMLInputElement
+        search.value = 'UNFIN'
+        search.dispatchEvent(new Event('input'))
+
+        expect(document.querySelectorAll('.card')).toHaveLength(1)
+        expect(document.querySelector('.card')?.textContent).toContain(
+            'Unfinished',
+        )
+        const tabs = document.querySelectorAll<HTMLButtonElement>('.tab-btn')
+        const counts = Array.from(tabs).map(
+            (tab) => tab.querySelector('.tab-count')?.textContent,
+        )
+        expect(counts).toEqual(['1', '1', '1'])
+
+        search.value = 'CHAN'
+        search.dispatchEvent(new Event('input'))
+        tabs[1].click()
+
+        expect(document.querySelectorAll('.card')).toHaveLength(1)
+        expect(document.querySelector('.card')?.textContent).toContain(
+            'Unwatched',
+        )
+        expect(search.value).toBe('CHAN')
+    })
+
+    it('shows a distinct no-results state and restores results when cleared', () => {
+        const search = document.getElementById(
+            'video-search',
+        ) as HTMLInputElement
+        search.value = 'missing'
+        search.dispatchEvent(new Event('input'))
+
+        expect(document.querySelectorAll('.card')).toHaveLength(0)
+        const empty = document.getElementById('empty')
+        expect(empty?.textContent).toBe('No unfinished videos match "missing".')
+        expect(empty?.classList.contains('hidden')).toBe(false)
+
+        search.value = ''
+        search.dispatchEvent(new Event('input'))
+
+        expect(document.querySelectorAll('.card')).toHaveLength(1)
+        expect(empty?.classList.contains('hidden')).toBe(true)
     })
 
     it('sorts items by updatedAt descending', async () => {
@@ -172,22 +222,57 @@ describe('popup', () => {
     })
 
     it('ignores a channel and updates the ignored list', async () => {
-        const ignoreBtn = document.querySelector<HTMLButtonElement>(
-            'button.ignore-btn',
-        )
+        const search = document.getElementById(
+            'video-search',
+        ) as HTMLInputElement
+        search.value = 'unfin'
+        search.dispatchEvent(new Event('input'))
+
+        const ignoreBtn =
+            document.querySelector<HTMLButtonElement>('button.ignore-btn')
         ignoreBtn?.click()
         await new Promise((resolve) => setTimeout(resolve, 0))
 
         const cards = document.querySelectorAll('.card')
         expect(cards).toHaveLength(0)
+        expect(search.value).toBe('unfin')
         const ignoredList = document.getElementById('ignored-list')
         expect(ignoredList?.textContent).toContain('chan a')
 
         const tabs = document.querySelectorAll<HTMLButtonElement>('.tab-btn')
-        const counts = Array.from(tabs).map((tab) =>
-            tab.querySelector('.tab-count')?.textContent,
+        const counts = Array.from(tabs).map(
+            (tab) => tab.querySelector('.tab-count')?.textContent,
         )
         expect(counts).toEqual([undefined, '1', '1'])
+    })
+
+    it('finds a matching video beyond the 20-item display cap', async () => {
+        setBaseDom()
+        ignored = []
+        videos = Array.from({ length: 25 }, (_, index) => ({
+            videoId: `video-${index}`,
+            t: 20,
+            ft: 20,
+            updatedAt: 25 - index,
+            duration: 100,
+            title: index === 24 ? 'Needle Beyond Cap' : `Common video ${index}`,
+            channel: 'Channel',
+        }))
+        vi.resetModules()
+        await import('../src/popup')
+        document.dispatchEvent(new Event('DOMContentLoaded'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        const search = document.getElementById(
+            'video-search',
+        ) as HTMLInputElement
+        search.value = 'needle'
+        search.dispatchEvent(new Event('input'))
+
+        expect(document.querySelectorAll('.card')).toHaveLength(1)
+        expect(document.querySelector('.card')?.textContent).toContain(
+            'Needle Beyond Cap',
+        )
     })
 
     it('toggles enabled state', async () => {
@@ -214,7 +299,8 @@ describe('popup', () => {
         card?.click()
         expect(openSpy).toHaveBeenCalledTimes(1)
 
-        const lastBtn = document.querySelector<HTMLButtonElement>('button.last-btn')
+        const lastBtn =
+            document.querySelector<HTMLButtonElement>('button.last-btn')
         lastBtn?.click()
         const furthestBtn = document.querySelector<HTMLButtonElement>(
             'button.furthest-btn',
@@ -225,14 +311,21 @@ describe('popup', () => {
     })
 
     it('deletes video entries', async () => {
-        const deleteBtn = document.querySelector<HTMLButtonElement>(
-            'button.delete-btn',
-        )
+        const search = document.getElementById(
+            'video-search',
+        ) as HTMLInputElement
+        search.value = 'UNFIN'
+        search.dispatchEvent(new Event('input'))
+
+        const deleteBtn =
+            document.querySelector<HTMLButtonElement>('button.delete-btn')
         deleteBtn?.click()
         await new Promise((resolve) => setTimeout(resolve, 0))
         const cards = document.querySelectorAll('.card')
         expect(cards).toHaveLength(0)
         const empty = document.getElementById('empty')
         expect(empty?.classList.contains('hidden')).toBe(false)
+        expect(empty?.textContent).toBe('No unfinished videos match "UNFIN".')
+        expect(search.value).toBe('UNFIN')
     })
 })

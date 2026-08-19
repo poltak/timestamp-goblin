@@ -37,6 +37,20 @@
                 <div class="ignored-title">Ignored channels</div>
                 <div id="ignored-list" class="ignored-list"></div>
             </section>
+            <section class="search">
+                <label class="search-label" for="video-search"
+                    >Search videos</label
+                >
+                <input
+                    id="video-search"
+                    class="search-input"
+                    type="search"
+                    placeholder="Search by title or channel"
+                    autocomplete="off"
+                    spellcheck="false"
+                    aria-controls="list"
+                />
+            </section>
             <div id="empty" class="empty hidden">No unfinished videos yet.</div>
             <div id="list" class="list"></div>
         </main>
