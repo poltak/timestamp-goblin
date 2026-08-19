@@ -23,6 +23,26 @@
                     <span class="toggle-ui" aria-hidden="true"></span>
                     <span class="toggle-text">Auto-saving</span>
                 </label>
+                <button
+                    id="settings-toggle"
+                    class="settings-toggle"
+                    type="button"
+                    title="Settings"
+                    aria-label="Settings"
+                    aria-controls="settings-view"
+                    aria-pressed="false"
+                >
+                    <svg
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        focusable="false"
+                    >
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path
+                            d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.08a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.08a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.08a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.12.6.6 1.06 1.2 1.15h.08a2 2 0 1 1 0 4h-.08c-.6.09-1.08.55-1.2 1.15Z"
+                        ></path>
+                    </svg>
+                </button>
             </div>
             <nav class="tabs">
                 <button class="tab-btn active" data-tab="unfinished">
@@ -33,26 +53,37 @@
             </nav>
         </header>
         <main>
-            <section class="ignored">
-                <div class="ignored-title">Ignored channels</div>
-                <div id="ignored-list" class="ignored-list"></div>
+            <section id="video-view" class="video-view">
+                <section class="search">
+                    <label class="search-label" for="video-search"
+                        >Search videos</label
+                    >
+                    <input
+                        id="video-search"
+                        class="search-input"
+                        type="search"
+                        placeholder="Search by title or channel"
+                        autocomplete="off"
+                        spellcheck="false"
+                        aria-controls="list"
+                    />
+                </section>
+                <div id="empty" class="empty hidden">
+                    No unfinished videos yet.
+                </div>
+                <div id="list" class="list"></div>
             </section>
-            <section class="search">
-                <label class="search-label" for="video-search"
-                    >Search videos</label
-                >
-                <input
-                    id="video-search"
-                    class="search-input"
-                    type="search"
-                    placeholder="Search by title or channel"
-                    autocomplete="off"
-                    spellcheck="false"
-                    aria-controls="list"
-                />
+            <section
+                id="settings-view"
+                class="settings-view hidden"
+                aria-labelledby="settings-heading"
+            >
+                <h1 id="settings-heading" class="settings-heading">Settings</h1>
+                <section class="ignored">
+                    <div class="ignored-title">Ignored channels</div>
+                    <div id="ignored-list" class="ignored-list"></div>
+                </section>
             </section>
-            <div id="empty" class="empty hidden">No unfinished videos yet.</div>
-            <div id="list" class="list"></div>
         </main>
         <script src="popup.js"></script>
     </body>

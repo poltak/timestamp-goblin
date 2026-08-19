@@ -28,6 +28,7 @@ let ignoredChannels: string[] = []
 let enabled = true
 let searchQuery = ''
 let videoSearchIndex: VideoSearchIndex | null = null
+let settingsOpen = false
 
 function categorizeVideo(state: StoredVideoState): Tab {
     if (!Number.isFinite(state.duration)) {
@@ -65,6 +66,9 @@ function render(): void {
     const root = document.getElementById('list')
     const empty = document.getElementById('empty')
     const ignoredRoot = document.getElementById('ignored-list')
+    const videoView = document.getElementById('video-view')
+    const settingsView = document.getElementById('settings-view')
+    const settingsToggle = document.getElementById('settings-toggle')
     const searchInput = document.getElementById(
         'video-search',
     ) as HTMLInputElement | null
@@ -82,6 +86,13 @@ function render(): void {
         searchInput.value = searchQuery
     }
     document.body.classList.toggle('is-disabled', !enabled)
+
+    videoView?.classList.toggle('hidden', settingsOpen)
+    settingsView?.classList.toggle('hidden', !settingsOpen)
+    settingsToggle?.classList.toggle('active', settingsOpen)
+    settingsToggle?.setAttribute('aria-pressed', String(settingsOpen))
+    videoView?.setAttribute('aria-hidden', String(settingsOpen))
+    settingsView?.setAttribute('aria-hidden', String(!settingsOpen))
 
     const ignoredSet = new Set(ignoredChannels)
     const visibleVideos = allVideos.filter((v) => {
@@ -116,7 +127,7 @@ function render(): void {
 
     document.querySelectorAll('.tab-btn').forEach((btn) => {
         const tab = (btn as HTMLElement).dataset.tab as Tab
-        if (tab === currentTab) {
+        if (!settingsOpen && tab === currentTab) {
             btn.classList.add('active')
         } else {
             btn.classList.remove('active')
@@ -328,8 +339,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.querySelectorAll('.tab-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
             currentTab = (btn as HTMLElement).dataset.tab as Tab
+            settingsOpen = false
             render()
         })
+    })
+
+    const settingsToggle = document.getElementById('settings-toggle')
+    settingsToggle?.addEventListener('click', () => {
+        settingsOpen = !settingsOpen
+        render()
     })
 
     const toggle = document.getElementById(

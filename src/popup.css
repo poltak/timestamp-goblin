@@ -77,6 +77,54 @@ header {
     position: absolute;
     right: 16px;
     top: 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.settings-toggle {
+    width: 30px;
+    height: 30px;
+    padding: 6px;
+    border: 1px solid var(--stroke);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.6);
+    color: var(--ink);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition:
+        background 150ms ease,
+        border-color 150ms ease,
+        color 150ms ease;
+}
+
+.settings-toggle:hover,
+.settings-toggle.active {
+    border-color: var(--ink);
+    background: var(--accent-hover-bg);
+}
+
+.settings-toggle:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+}
+
+.settings-toggle svg {
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+@media (prefers-color-scheme: dark) {
+    .settings-toggle {
+        background: rgba(0, 0, 0, 0.35);
+    }
 }
 
 .tabs {
@@ -176,6 +224,12 @@ main {
     overflow-y: auto;
     overflow-x: hidden;
     padding: 12px;
+}
+
+.settings-heading {
+    margin: 0 0 12px;
+    font-size: 18px;
+    line-height: 1.3;
 }
 
 .toggle {

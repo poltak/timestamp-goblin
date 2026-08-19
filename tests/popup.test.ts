@@ -72,6 +72,20 @@ describe('popup', () => {
             <span class="toggle-ui" aria-hidden="true"></span>
             <span class="toggle-text">Auto-saving</span>
           </label>
+          <button
+            id="settings-toggle"
+            class="settings-toggle"
+            type="button"
+            title="Settings"
+            aria-label="Settings"
+            aria-controls="settings-view"
+            aria-pressed="false"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.08a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.08a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.08a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.12.6.6 1.06 1.2 1.15h.08a2 2 0 1 1 0 4h-.08c-.6.09-1.08.55-1.2 1.15Z"></path>
+            </svg>
+          </button>
         </div>
         <nav class="tabs">
           <button class="tab-btn active" data-tab="unfinished">Unfinished</button>
@@ -80,16 +94,21 @@ describe('popup', () => {
         </nav>
       </header>
       <main>
-        <section class="ignored">
-          <div class="ignored-title">Ignored channels</div>
-          <div id="ignored-list" class="ignored-list"></div>
+        <section id="video-view" class="video-view">
+          <section class="search">
+            <label class="search-label" for="video-search">Search videos</label>
+            <input id="video-search" class="search-input" type="search" />
+          </section>
+          <div id="empty" class="empty hidden"></div>
+          <div id="list" class="list"></div>
         </section>
-        <section class="search">
-          <label class="search-label" for="video-search">Search videos</label>
-          <input id="video-search" class="search-input" type="search" />
+        <section id="settings-view" class="settings-view hidden" aria-labelledby="settings-heading">
+          <h1 id="settings-heading" class="settings-heading">Settings</h1>
+          <section class="ignored">
+            <div class="ignored-title">Ignored channels</div>
+            <div id="ignored-list" class="ignored-list"></div>
+          </section>
         </section>
-        <div id="empty" class="empty hidden"></div>
-        <div id="list" class="list"></div>
       </main>
     `
     }
@@ -137,6 +156,78 @@ describe('popup', () => {
         cards = document.querySelectorAll('.card')
         expect(cards).toHaveLength(1)
         expect(cards[0].textContent).toContain('Finished')
+    })
+
+    it('opens and closes settings without losing the active video view', () => {
+        const tabs = document.querySelectorAll<HTMLButtonElement>('.tab-btn')
+        tabs[1].click()
+
+        const search = document.getElementById(
+            'video-search',
+        ) as HTMLInputElement
+        search.value = 'CHAN'
+        search.dispatchEvent(new Event('input'))
+
+        const settingsToggle = document.getElementById(
+            'settings-toggle',
+        ) as HTMLButtonElement
+        settingsToggle.click()
+
+        expect(
+            document.getElementById('video-view')?.classList.contains('hidden'),
+        ).toBe(true)
+        expect(
+            document
+                .getElementById('settings-view')
+                ?.classList.contains('hidden'),
+        ).toBe(false)
+        expect(document.getElementById('settings-view')?.textContent).toContain(
+            'Settings',
+        )
+        expect(settingsToggle.classList.contains('active')).toBe(true)
+        expect(settingsToggle.getAttribute('aria-pressed')).toBe('true')
+        expect(
+            Array.from(tabs).filter((tab) => tab.classList.contains('active')),
+        ).toHaveLength(0)
+
+        settingsToggle.click()
+
+        expect(
+            document.getElementById('video-view')?.classList.contains('hidden'),
+        ).toBe(false)
+        expect(
+            document
+                .getElementById('settings-view')
+                ?.classList.contains('hidden'),
+        ).toBe(true)
+        expect(settingsToggle.classList.contains('active')).toBe(false)
+        expect(settingsToggle.getAttribute('aria-pressed')).toBe('false')
+        expect(tabs[1].classList.contains('active')).toBe(true)
+        expect(search.value).toBe('CHAN')
+        expect(document.querySelectorAll('.card')).toHaveLength(1)
+        expect(document.querySelector('.card')?.textContent).toContain(
+            'Unwatched',
+        )
+    })
+
+    it('closes settings when selecting another video tab', () => {
+        const settingsToggle = document.getElementById(
+            'settings-toggle',
+        ) as HTMLButtonElement
+        settingsToggle.click()
+
+        const tabs = document.querySelectorAll<HTMLButtonElement>('.tab-btn')
+        tabs[2].click()
+
+        expect(
+            document
+                .getElementById('settings-view')
+                ?.classList.contains('hidden'),
+        ).toBe(true)
+        expect(tabs[2].classList.contains('active')).toBe(true)
+        expect(document.querySelector('.card')?.textContent).toContain(
+            'Finished',
+        )
     })
 
     it('searches titles and channels with case-insensitive prefixes', () => {
@@ -236,6 +327,15 @@ describe('popup', () => {
         const cards = document.querySelectorAll('.card')
         expect(cards).toHaveLength(0)
         expect(search.value).toBe('unfin')
+        const settingsToggle = document.getElementById(
+            'settings-toggle',
+        ) as HTMLButtonElement
+        settingsToggle.click()
+        expect(
+            document
+                .getElementById('settings-view')
+                ?.classList.contains('hidden'),
+        ).toBe(false)
         const ignoredList = document.getElementById('ignored-list')
         expect(ignoredList?.textContent).toContain('chan a')
 
