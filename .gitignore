@@ -26,3 +26,4 @@ web-extension/extension.zip
 website/dist-help
 
 *.zip
+gha-creds-*.json

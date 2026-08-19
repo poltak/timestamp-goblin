@@ -26,3 +26,6 @@ npm run build:prod
 # Zip ready for Chrome Web Store upload
 npm run package
 ```
+
+See [Chrome Web Store publishing](docs/chrome-web-store-publishing.md) for the
+automatic release workflow and its one-time setup.

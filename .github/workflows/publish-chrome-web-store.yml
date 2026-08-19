@@ -1,0 +1,249 @@
+name: Publish Chrome Web Store
+
+on:
+    push:
+        branches:
+            - master
+        paths:
+            - src/manifest.json
+            - package.json
+            - package-lock.json
+
+concurrency:
+    group: chrome-web-store-publish
+    cancel-in-progress: false
+
+permissions:
+    contents: read
+    id-token: write
+
+jobs:
+    publish:
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - name: Check out repository history
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v7
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: Check release version
+              id: version
+              env:
+                  BEFORE_SHA: ${{ github.event.before }}
+              run: node scripts/check-release-version.mjs "$BEFORE_SHA"
+
+            - name: Check required repository variables
+              if: steps.version.outputs.release == 'true'
+              env:
+                  CWS_PROJECT_ID: ${{ vars.CWS_PROJECT_ID }}
+                  CWS_WIF_PROVIDER: ${{ vars.CWS_WIF_PROVIDER }}
+                  CWS_SERVICE_ACCOUNT: ${{ vars.CWS_SERVICE_ACCOUNT }}
+                  CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+                  CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID }}
+              run: |
+                  set -euo pipefail
+                  missing=()
+                  for name in CWS_PROJECT_ID CWS_WIF_PROVIDER CWS_SERVICE_ACCOUNT CWS_PUBLISHER_ID CWS_EXTENSION_ID; do
+                      if [[ -z "${!name:-}" ]]; then
+                          missing+=("$name")
+                      fi
+                  done
+
+                  if (( ${#missing[@]} > 0 )); then
+                      printf 'Missing GitHub repository variables: %s\n' "${missing[*]}" >&2
+                      exit 1
+                  fi
+
+            - name: Install dependencies
+              if: steps.version.outputs.release == 'true'
+              run: npm ci
+
+            - name: Run tests
+              if: steps.version.outputs.release == 'true'
+              run: npm run test:run
+
+            - name: Type-check source
+              if: steps.version.outputs.release == 'true'
+              run: npm run check
+
+            - name: Type-check tests
+              if: steps.version.outputs.release == 'true'
+              run: npm exec -- tsc -p tsconfig.test.json --noEmit
+
+            - name: Build release package
+              if: steps.version.outputs.release == 'true'
+              run: npm run package
+
+            - name: Authenticate to Google Cloud
+              if: steps.version.outputs.release == 'true'
+              id: auth
+              uses: google-github-actions/auth@v3
+              with:
+                  project_id: ${{ vars.CWS_PROJECT_ID }}
+                  workload_identity_provider: ${{ vars.CWS_WIF_PROVIDER }}
+                  service_account: ${{ vars.CWS_SERVICE_ACCOUNT }}
+                  token_format: access_token
+                  access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+                  create_credentials_file: false
+
+            - name: Upload package to Chrome Web Store
+              if: steps.version.outputs.release == 'true'
+              env:
+                  ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+                  CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+                  CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID }}
+              run: |
+                  set -euo pipefail
+
+                  api_base="https://chromewebstore.googleapis.com/v2/publishers/${CWS_PUBLISHER_ID}/items/${CWS_EXTENSION_ID}"
+                  upload_url="https://chromewebstore.googleapis.com/upload/v2/publishers/${CWS_PUBLISHER_ID}/items/${CWS_EXTENSION_ID}:upload"
+                  status_url="${api_base}:fetchStatus"
+
+                  request_json() {
+                      local method="$1"
+                      local url="$2"
+                      local body="${3:-}"
+                      local response
+                      local exit_code
+
+                      set +e
+                      if [[ -n "$body" ]]; then
+                          response="$(curl --fail-with-body --silent --show-error \
+                              -X "$method" \
+                              -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                              -H 'Accept: application/json' \
+                              -H 'Content-Type: application/json' \
+                              --data "$body" \
+                              "$url")"
+                      else
+                          response="$(curl --fail-with-body --silent --show-error \
+                              -X "$method" \
+                              -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                              -H 'Accept: application/json' \
+                              "$url")"
+                      fi
+                      exit_code=$?
+                      set -e
+
+                      if (( exit_code != 0 )); then
+                          printf 'Chrome Web Store API request failed: %s %s\n' "$method" "$url" >&2
+                          printf '%s\n' "$response" >&2
+                          return "$exit_code"
+                      fi
+
+                      printf '%s' "$response"
+                  }
+
+                  set +e
+                  upload_response="$(curl --fail-with-body --silent --show-error \
+                      -X POST \
+                      -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                      -H 'Accept: application/json' \
+                      -H 'Content-Type: application/zip' \
+                      --upload-file timestamp-goblin.zip \
+                      "$upload_url")"
+                  upload_exit_code=$?
+                  set -e
+
+                  if (( upload_exit_code != 0 )); then
+                      printf 'Chrome Web Store upload failed.\n%s\n' "$upload_response" >&2
+                      exit "$upload_exit_code"
+                  fi
+
+                  printf '%s\n' "$upload_response" | jq .
+                  if jq -e 'has("error") and .error != null' <<<"$upload_response" >/dev/null; then
+                      printf 'Chrome Web Store upload returned an API error.\n' >&2
+                      exit 1
+                  fi
+
+                  upload_state="$(jq -r '.uploadState // empty' <<<"$upload_response")"
+                  case "$upload_state" in
+                      SUCCEEDED|UPLOAD_SUCCESS|UPLOAD_SUCCEEDED)
+                          ;;
+                      IN_PROGRESS|UPLOAD_IN_PROGRESS)
+                          printf 'Chrome Web Store upload is still in progress; polling status.\n'
+                          upload_succeeded=false
+                          for attempt in $(seq 1 30); do
+                              sleep 10
+                              status_response="$(request_json GET "$status_url")" || exit 1
+                              printf '%s\n' "$status_response" | jq .
+
+                              if jq -e 'has("error") and .error != null' <<<"$status_response" >/dev/null; then
+                                  printf 'Chrome Web Store status returned an API error.\n' >&2
+                                  exit 1
+                              fi
+
+                              status_state="$(jq -r '.lastAsyncUploadState // .uploadState // empty' <<<"$status_response")"
+                              case "$status_state" in
+                                  SUCCEEDED|UPLOAD_SUCCESS|UPLOAD_SUCCEEDED)
+                                      upload_succeeded=true
+                                      break
+                                      ;;
+                                  IN_PROGRESS|UPLOAD_IN_PROGRESS)
+                                      printf 'Upload still in progress (poll %s/30).\n' "$attempt"
+                                      ;;
+                                  FAILED|UPLOAD_FAILED|NOT_FOUND)
+                                      printf 'Chrome Web Store upload ended with state: %s\n' "$status_state" >&2
+                                      exit 1
+                                      ;;
+                                  *)
+                                      printf 'Unexpected Chrome Web Store upload state: %s\n' "$status_state" >&2
+                                      exit 1
+                                      ;;
+                              esac
+                          done
+
+                          if [[ "$upload_succeeded" != true ]]; then
+                              printf 'Chrome Web Store upload did not finish within five minutes.\n' >&2
+                              exit 1
+                          fi
+                          ;;
+                      FAILED|UPLOAD_FAILED|NOT_FOUND)
+                          printf 'Chrome Web Store upload ended with state: %s\n' "$upload_state" >&2
+                          exit 1
+                          ;;
+                      *)
+                          printf 'Unexpected Chrome Web Store upload state: %s\n' "$upload_state" >&2
+                          exit 1
+                          ;;
+                  esac
+
+            - name: Publish package
+              if: steps.version.outputs.release == 'true'
+              env:
+                  ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+                  CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+                  CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID }}
+              run: |
+                  set -euo pipefail
+                  publish_url="https://chromewebstore.googleapis.com/v2/publishers/${CWS_PUBLISHER_ID}/items/${CWS_EXTENSION_ID}:publish"
+                  set +e
+                  publish_response="$(curl --fail-with-body --silent --show-error \
+                      -X POST \
+                      -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                      -H 'Accept: application/json' \
+                      -H 'Content-Type: application/json' \
+                      --data '{"publishType":"DEFAULT_PUBLISH"}' \
+                      "$publish_url")"
+                  publish_exit_code=$?
+                  set -e
+
+                  if (( publish_exit_code != 0 )); then
+                      printf 'Chrome Web Store publish failed.\n%s\n' "$publish_response" >&2
+                      exit "$publish_exit_code"
+                  fi
+
+                  printf '%s\n' "$publish_response" | jq .
+                  if jq -e 'has("error") and .error != null' <<<"$publish_response" >/dev/null; then
+                      printf 'Chrome Web Store publish returned an API error.\n' >&2
+                      exit 1
+                  fi
+
+                  printf 'Version %s submitted to the Chrome Web Store for review.\n' "${{ steps.version.outputs.version }}"
