@@ -58,7 +58,7 @@ describe('youtube helpers', () => {
     it('finds title and channel', () => {
         document.body.innerHTML = `
       <h1 class="title"><yt-formatted-string>Video Title</yt-formatted-string></h1>
-      <ytd-channel-name><a>Channel Name</a></ytd-channel-name>
+      <ytd-video-owner-renderer><ytd-channel-name><a>Channel Name</a></ytd-channel-name></ytd-video-owner-renderer>
     `
         expect(getVideoTitle()).toBe('Video Title')
         expect(getChannelName()).toBe('Channel Name')
@@ -68,6 +68,33 @@ describe('youtube helpers', () => {
         document.body.innerHTML = ''
         document.title = 'Cool Video - YouTube'
         expect(getVideoTitle()).toBe('Cool Video')
+        document.title = ' - YouTube'
+        expect(getVideoTitle()).toBeNull()
+    })
+
+    it('gets the owner channel instead of a recommended channel', () => {
+        document.body.innerHTML = `
+            <ytd-channel-name><a>Recommendation</a></ytd-channel-name>
+            <ytd-video-owner-renderer>
+                <a aria-label="Avatar"></a>
+                <ytd-channel-name><a>Video owner</a></ytd-channel-name>
+            </ytd-video-owner-renderer>`
+        expect(getChannelName()).toBe('Video owner')
+        document.querySelector('ytd-video-owner-renderer')!.remove()
+        expect(getChannelName()).toBeNull()
+    })
+
+    it('selects the watch player instead of an earlier preview', async () => {
+        const preview = document.createElement('video')
+        const player = document.createElement('div')
+        player.id = 'movie_player'
+        const video = document.createElement('video')
+        player.appendChild(video)
+        for (const item of [preview, video])
+            Object.defineProperty(item, 'readyState', { value: 1 })
+        document.body.replaceChildren(preview, player)
+        const handle = waitForVideoElement()
+        await expect(handle.promise).resolves.toBe(video)
     })
 
     it('waits for video element and can cancel', async () => {
@@ -78,6 +105,7 @@ describe('youtube helpers', () => {
         const promise = handle.promise
 
         const video = document.createElement('video')
+        video.className = 'html5-main-video'
         Object.defineProperty(video, 'readyState', { value: 1 })
         document.body.appendChild(video)
         await Promise.resolve()
@@ -98,6 +126,7 @@ describe('youtube helpers', () => {
     it('waits for metadata on an existing video and removes listeners', async () => {
         vi.useFakeTimers()
         const video = document.createElement('video')
+        video.className = 'html5-main-video'
         document.body.replaceChildren(video)
         const remove = vi.spyOn(video, 'removeEventListener')
         const handle = waitForVideoElement(1000)

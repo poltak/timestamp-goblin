@@ -52,15 +52,15 @@ export function getVideoTitle(): string | null {
     if (!raw) {
         return null
     }
-    return raw.replace(/\s+-\s+YouTube\s*$/, '').trim() ?? null
+    return raw.replace(/(?:^|\s+)-\s+YouTube\s*$/, '').trim() || null
 }
 
 export function getChannelName(): string | null {
     return pickText([
-        'ytd-channel-name a',
+        'ytd-video-owner-renderer ytd-channel-name a',
+        '#owner #channel-name a',
         '#owner-name a',
-        '#text-container.ytd-channel-name',
-        'ytd-video-owner-renderer a',
+        'ytd-video-owner-renderer #text-container.ytd-channel-name',
     ])
 }
 
@@ -91,7 +91,13 @@ export function waitForVideoElement(timeoutMs = 15000): WaitHandle {
                 finish()
         }
         const findVideo = () => {
-            const found = document.querySelector<HTMLVideoElement>('video')
+            const found =
+                document.querySelector<HTMLVideoElement>(
+                    '#movie_player video',
+                ) ??
+                document.querySelector<HTMLVideoElement>(
+                    'video.html5-main-video',
+                )
             if (found !== video) {
                 video?.removeEventListener('loadedmetadata', onReady)
                 video = found
