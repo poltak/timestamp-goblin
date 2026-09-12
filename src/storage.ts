@@ -88,9 +88,7 @@ export async function deleteVideoState(videoId: string): Promise<void> {
     await chrome.storage.local.remove(key)
 }
 
-export async function getIgnoredChannels(): Promise<string[]> {
-    const result = await chrome.storage.local.get(IGNORED_CHANNELS_KEY)
-    const value = result[IGNORED_CHANNELS_KEY]
+function readIgnoredChannels(value: unknown): string[] {
     if (!Array.isArray(value)) {
         return []
     }
@@ -102,6 +100,28 @@ export async function getIgnoredChannels(): Promise<string[]> {
                 .filter(Boolean),
         ),
     ]
+}
+
+export async function getIgnoredChannels(): Promise<string[]> {
+    const result = await chrome.storage.local.get(IGNORED_CHANNELS_KEY)
+    return readIgnoredChannels(result[IGNORED_CHANNELS_KEY])
+}
+
+export async function getTrackingSettings(): Promise<{
+    enabled: boolean
+    ignoredChannels: string[]
+}> {
+    const result = await chrome.storage.local.get([
+        ENABLED_KEY,
+        IGNORED_CHANNELS_KEY,
+    ])
+    return {
+        enabled:
+            typeof result[ENABLED_KEY] === 'boolean'
+                ? result[ENABLED_KEY]
+                : true,
+        ignoredChannels: readIgnoredChannels(result[IGNORED_CHANNELS_KEY]),
+    }
 }
 
 export async function getEnabled(): Promise<boolean> {

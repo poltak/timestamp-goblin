@@ -15,8 +15,12 @@ describe('storage', () => {
     beforeEach(() => {
         store = {}
         const local = {
-            get: vi.fn(async (key?: string) => {
+            get: vi.fn(async (key?: string | string[]) => {
                 if (!key) return { ...store }
+                if (Array.isArray(key))
+                    return Object.fromEntries(
+                        key.map((name) => [name, store[name]]),
+                    )
                 return { [key]: store[key] }
             }),
             set: vi.fn(async (value: Store) => {
@@ -153,6 +157,23 @@ describe('storage', () => {
         expect(await getEnabled()).toBe(true)
         await setEnabled(false)
         expect(await getEnabled()).toBe(false)
+    })
+
+    it('loads tracking settings in one storage call', async () => {
+        const { getTrackingSettings } = await import('../src/storage')
+        await chrome.storage.local.set({
+            enabled: false,
+            'ignored:channels': [' Channel '],
+        })
+        expect(await getTrackingSettings()).toEqual({
+            enabled: false,
+            ignoredChannels: ['channel'],
+        })
+        expect(chrome.storage.local.get).toHaveBeenCalledTimes(1)
+        expect(chrome.storage.local.get).toHaveBeenCalledWith([
+            'enabled',
+            'ignored:channels',
+        ])
     })
 
     it('deletes state', async () => {

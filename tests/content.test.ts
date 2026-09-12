@@ -22,7 +22,13 @@ const youtubeMocks = {
     waitForVideoElement: vi.fn(),
 }
 
-vi.mock('../src/storage', () => storageMocks)
+vi.mock('../src/storage', () => ({
+    ...storageMocks,
+    getTrackingSettings: async () => ({
+        enabled: await storageMocks.getEnabled(),
+        ignoredChannels: await storageMocks.getIgnoredChannels(),
+    }),
+}))
 vi.mock('../src/youtube', () => youtubeMocks)
 vi.mock('../src/spa', () => ({
     watchUrlChanges: vi.fn(() => vi.fn()),
@@ -189,9 +195,117 @@ describe('content script', () => {
         const state = mod.__testing.getState()
         expect(state.currentFurthestTime).toBe(130)
 
-        video.currentTime = 200
+        video.currentTime = 0
         vi.advanceTimersByTime(500)
         expect(video.currentTime).toBeCloseTo(120)
+    })
+
+    it('does not overwrite a user seek during resume reapply', async () => {
+        const mod = await import('../src/content')
+        const video = document.createElement('video')
+        Object.defineProperty(video, 'duration', { value: 300 })
+        storageMocks.getVideoState.mockResolvedValue({
+            t: 120,
+            ft: 130,
+            updatedAt: 1,
+            duration: 300,
+            title: 'Title',
+            channel: 'Channel',
+        })
+        mod.__testing.setActive('vid1', video)
+        await mod.tryResume(video, 'vid1', mod.__testing.getState().initToken)
+        video.currentTime = 200
+        vi.advanceTimersByTime(500)
+        expect(video.currentTime).toBe(200)
+    })
+
+    it('allows only one save while storage is pending', async () => {
+        const mod = await import('../src/content')
+        const video = document.createElement('video')
+        video.currentTime = 42
+        mod.__testing.setActive('vid1', video)
+        await Promise.all([mod.saveNow('pause'), mod.saveNow('hidden')])
+        expect(storageMocks.setVideoState).toHaveBeenCalledTimes(1)
+    })
+
+    it('discards a save when navigation changes during a settings read', async () => {
+        const mod = await import('../src/content')
+        const settings = deferred<boolean>()
+        storageMocks.getEnabled.mockReturnValueOnce(settings.promise)
+        const video = document.createElement('video')
+        video.currentTime = 42
+        mod.__testing.setActive('vid1', video)
+        const saving = mod.saveNow('pause')
+        mod.teardown()
+        mod.__testing.setActive('vid2', video)
+        youtubeMocks.getVideoId.mockReturnValue('vid2')
+        video.currentTime = 90
+        settings.resolve(true)
+        await saving
+        expect(storageMocks.setVideoState).not.toHaveBeenCalled()
+        expect(mod.__testing.getState().currentFurthestTime).toBe(0)
+    })
+
+    it('catches storage failures and permits the next save to retry', async () => {
+        const mod = await import('../src/content')
+        const video = document.createElement('video')
+        video.currentTime = 42
+        mod.__testing.setActive('vid1', video)
+        storageMocks.setVideoState.mockRejectedValueOnce(
+            new Error('storage unavailable'),
+        )
+        await expect(mod.saveNow('pause')).resolves.toBeUndefined()
+        await mod.saveNow('pause')
+        expect(storageMocks.setVideoState).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps furthest progress when tracking is enabled after initialization', async () => {
+        const mod = await import('../src/content')
+        const video = document.createElement('video')
+        video.currentTime = 42
+        mod.__testing.setActive('vid1', video)
+        storageMocks.getEnabled.mockResolvedValue(false)
+        storageMocks.getVideoState.mockResolvedValue({
+            t: 120,
+            ft: 150,
+            updatedAt: 1,
+            duration: 300,
+            title: 'Title',
+            channel: 'Channel',
+        })
+        await mod.tryResume(video, 'vid1', mod.__testing.getState().initToken)
+        storageMocks.getEnabled.mockResolvedValue(true)
+        await mod.saveNow('pause')
+        expect(storageMocks.setVideoState).toHaveBeenCalledWith(
+            'vid1',
+            expect.objectContaining({ t: 42, ft: 150 }),
+        )
+    })
+
+    it('does not resume after a URL change while storage is pending', async () => {
+        const mod = await import('../src/content')
+        const video = document.createElement('video')
+        Object.defineProperty(video, 'duration', { value: 300 })
+        mod.__testing.setActive('vid1', video)
+        const state = deferred<import('../src/types').StoredVideoState>()
+        storageMocks.getVideoState.mockReturnValueOnce(state.promise)
+        const resuming = mod.tryResume(
+            video,
+            'vid1',
+            mod.__testing.getState().initToken,
+        )
+        youtubeMocks.getVideoId.mockReturnValue('vid2')
+        state.resolve({
+            t: 120,
+            ft: 130,
+            updatedAt: 1,
+            duration: 300,
+            title: 'Title',
+            channel: 'Channel',
+        })
+        await resuming
+        expect(video.currentTime).toBe(0)
+        expect(mod.__testing.getState().resumeReapplyId).toBeNull()
     })
 
     it('does not resume when guards fail', async () => {

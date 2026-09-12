@@ -1,7 +1,6 @@
 import { watchUrlChanges, type UrlChangeHandler } from './spa'
 import {
-    getIgnoredChannels,
-    getEnabled,
+    getTrackingSettings,
     getVideoState,
     normalizeChannelName,
     setVideoState,
@@ -32,6 +31,7 @@ let activeVideoId: string | null = null
 let activeVideo: HTMLVideoElement | null = null
 let saveIntervalId: number | null = null
 let lastWriteAt = 0
+let savingToken: number | null = null
 let initToken = 0
 let waitHandle: ReturnType<typeof waitForVideoElement> | null = null
 let resumeReapplyId: number | null = null
@@ -79,6 +79,7 @@ export function teardown(): void {
     activeVideo = null
     activeVideoId = null
     lastWriteAt = 0
+    savingToken = null
     currentFurthestTime = 0
 }
 
@@ -99,16 +100,8 @@ export function isSafeToSave(video: HTMLVideoElement): boolean {
     return true
 }
 
-async function isIgnoredChannel(name: string): Promise<boolean> {
-    const normalized = normalizeChannelName(name)
-    if (!normalized) {
-        return false
-    }
-    const ignored = await getIgnoredChannels()
-    return ignored.includes(normalized)
-}
-
 export async function saveNow(reason: string): Promise<void> {
+    const token = initToken
     const videoId = activeVideoId
     const video = activeVideo
     const now = Date.now()
@@ -117,17 +110,14 @@ export async function saveNow(reason: string): Promise<void> {
         !video ||
         videoId !== getVideoId() ||
         !isSafeToSave(video) ||
-        now - lastWriteAt < MIN_WRITE_GAP_MS
+        now - lastWriteAt < MIN_WRITE_GAP_MS ||
+        savingToken === token
     ) {
         log('not saving', { videoId, video, now, lastWriteAt })
         return
     }
 
-    if (!(await getEnabled())) {
-        log('not saving (disabled)')
-        return
-    }
-
+    const time = video.currentTime
     const duration =
         Number.isFinite(video.duration) && video.duration > 0
             ? video.duration
@@ -135,25 +125,37 @@ export async function saveNow(reason: string): Promise<void> {
     const title = getVideoTitle() ?? DEFAULT_VIDEO_TITLE
     const channel = getChannelName() ?? DEFAULT_CHANNEL_NAME
 
-    if (await isIgnoredChannel(channel)) {
-        log('not saving (ignored channel)', { videoId, channel })
-        return
+    savingToken = token
+    try {
+        const settings = await getTrackingSettings()
+        if (
+            token !== initToken ||
+            video !== activeVideo ||
+            videoId !== getVideoId() ||
+            !settings.enabled ||
+            settings.ignoredChannels.includes(normalizeChannelName(channel))
+        )
+            return
+
+        const payload: StoredVideoState = {
+            t: time,
+            ft: Math.max(currentFurthestTime, time),
+            updatedAt: now,
+            duration,
+            channel,
+            title,
+        }
+        log('save', reason, payload)
+        await setVideoState(videoId, payload)
+        if (token === initToken) {
+            lastWriteAt = now
+            currentFurthestTime = payload.ft
+        }
+    } catch (error) {
+        log('save failed', error)
+    } finally {
+        if (savingToken === token) savingToken = null
     }
-
-    lastWriteAt = now
-    currentFurthestTime = Math.max(currentFurthestTime, video.currentTime)
-
-    const payload: StoredVideoState = {
-        t: video.currentTime,
-        ft: currentFurthestTime,
-        updatedAt: now,
-        duration,
-        channel,
-        title,
-    }
-
-    log('save', reason, payload)
-    await setVideoState(videoId, payload)
 }
 
 export function onPause(): void {
@@ -162,7 +164,7 @@ export function onPause(): void {
 }
 
 export function onPlay(): void {
-    startSavingLoop()
+    if (!document.hidden) startSavingLoop()
 }
 
 export function onVisibilityChange(): void {
@@ -197,19 +199,11 @@ export async function tryResume(
     videoId: string,
     token: number,
 ): Promise<void> {
-    if (!(await getEnabled())) {
-        log('not resuming (disabled)', { videoId })
-        return
-    }
-
-    const channel = getChannelName() ?? DEFAULT_CHANNEL_NAME
-    if (await isIgnoredChannel(channel)) {
-        log('not resuming (ignored channel)', { videoId, channel })
-        return
-    }
-
-    const state = await getVideoState(videoId)
-    if (token !== initToken) {
+    const [state, settings] = await Promise.all([
+        getVideoState(videoId),
+        getTrackingSettings(),
+    ])
+    if (token !== initToken || videoId !== getVideoId()) {
         return
     }
 
@@ -220,6 +214,10 @@ export async function tryResume(
     }
 
     if (
+        !settings.enabled ||
+        settings.ignoredChannels.includes(
+            normalizeChannelName(getChannelName() ?? DEFAULT_CHANNEL_NAME),
+        ) ||
         !state ||
         state.t < MIN_RESUME_SECONDS ||
         isLiveVideo(video) ||
@@ -234,10 +232,17 @@ export async function tryResume(
 
     resumeReapplyId = window.setTimeout(() => {
         resumeReapplyId = null
-        if (token !== initToken || videoId !== activeVideoId) {
+        if (
+            token !== initToken ||
+            videoId !== activeVideoId ||
+            videoId !== getVideoId()
+        ) {
             return
         }
-        if (Math.abs(video.currentTime - target) > 1.5) {
+        if (
+            video.currentTime <= NEAR_START_WINDOW_SECONDS &&
+            Math.abs(video.currentTime - target) > 1.5
+        ) {
             log('resume reapply', { target, current: video.currentTime })
             video.currentTime = target
         }
@@ -268,7 +273,12 @@ export async function initForVideo(videoId: string): Promise<void> {
 
     activeVideo = video
 
-    await tryResume(video, videoId, token)
+    try {
+        await tryResume(video, videoId, token)
+    } catch (error) {
+        log('resume failed', error)
+        return
+    }
     if (token !== initToken) {
         return
     }
