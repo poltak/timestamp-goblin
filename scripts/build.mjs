@@ -1,69 +1,67 @@
 import { build, context } from 'esbuild'
-import { readFile, writeFile, mkdir, copyFile, rm } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { watch } from 'node:fs'
+import { mkdir, copyFile, rm } from 'node:fs/promises'
+import { basename, resolve } from 'node:path'
 
 const distDir = resolve('dist')
 const isProd =
     process.env.NODE_ENV === 'production' || process.argv.includes('--prod')
 const isWatch = process.argv.includes('--watch')
-await rm(distDir, { recursive: true, force: true })
-await mkdir(distDir, { recursive: true })
-
-const SCRIPTS = {
-    content: {
-        entry: 'src/content.ts',
-        outfile: 'dist/content.js',
-    },
-    popup: {
-        entry: 'src/popup.ts',
-        outfile: 'dist/popup.js',
-    },
-}
-
-const manifest = await readFile('src/manifest.json', 'utf8')
-await writeFile('dist/manifest.json', manifest, 'utf8')
-
-const popupHtml = await readFile('src/popup.html', 'utf8')
-await writeFile('dist/popup.html', popupHtml, 'utf8')
-
-const popupCss = await readFile('src/popup.css', 'utf8')
-await writeFile('dist/popup.css', popupCss, 'utf8')
-
-await copyFile('src/assets/icon-128.png', resolve(distDir, 'icon-128.png'))
-await copyFile('src/assets/icon-48.png', resolve(distDir, 'icon-48.png'))
-await copyFile('src/assets/icon-32.png', resolve(distDir, 'icon-32.png'))
-await copyFile('src/assets/icon-16.png', resolve(distDir, 'icon-16.png'))
-
 const modeLabel = isProd ? 'production' : 'development'
-
-await Promise.all(
-    Object.values(SCRIPTS).map(async (script) => {
-        const buildOptions = {
-            entryPoints: [script.entry],
-            outfile: script.outfile,
-            bundle: true,
-            format: 'iife',
-            platform: 'browser',
-            target: ['es2018'],
-            minify: isProd,
-            define: {
-                'import.meta.env.MODE': JSON.stringify(modeLabel),
-            },
-        }
-
-        if (isWatch) {
-            const ctx = await context(buildOptions)
-            console.log(`Watching ${script.entry}...`)
-            await ctx.watch()
-        } else {
-            await build(buildOptions)
-            console.log(`Built ${script.entry} -> ${script.outfile}`)
-        }
-    }),
+const staticFiles = new Map(
+    [
+        'manifest.json',
+        'popup.html',
+        'popup.css',
+        'assets/icon-16.png',
+        'assets/icon-32.png',
+        'assets/icon-48.png',
+        'assets/icon-128.png',
+    ].map((file) => [resolve('src', file), resolve(distDir, basename(file))]),
 )
 
-console.log(`\nBuild (${modeLabel}) complete!`)
+await rm(distDir, { recursive: true, force: true })
+await mkdir(distDir, { recursive: true })
+await Promise.all(
+    [...staticFiles].map(([source, target]) => copyFile(source, target)),
+)
 
-if (!isWatch) {
-    process.exit(0)
+const buildOptions = {
+    entryPoints: ['src/content.ts', 'src/popup.ts'],
+    outdir: distDir,
+    bundle: true,
+    format: 'iife',
+    platform: 'browser',
+    target: ['es2018'],
+    minify: isProd,
+    define: { 'import.meta.env.MODE': JSON.stringify(modeLabel) },
 }
+
+if (isWatch) {
+    const ctx = await context(buildOptions)
+    let copyQueue = Promise.resolve()
+    const watcher = watch('src', { recursive: true }, (_event, filename) => {
+        if (!filename) return
+        const source = resolve('src', filename)
+        const target = staticFiles.get(source)
+        if (target) {
+            copyQueue = copyQueue
+                .then(() => copyFile(source, target))
+                .catch((error) => {
+                    console.error(`Could not copy ${filename}`, error)
+                })
+        }
+    })
+    const stop = async () => {
+        watcher.close()
+        await copyQueue
+        await ctx.dispose()
+    }
+    process.once('SIGINT', stop)
+    process.once('SIGTERM', stop)
+    await ctx.watch()
+} else {
+    await build(buildOptions)
+}
+
+console.log(`Build (${modeLabel}) complete!`)
