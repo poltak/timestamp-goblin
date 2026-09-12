@@ -15,6 +15,9 @@ describe('youtube helpers', () => {
         expect(getThumbnailUrl('abc')).toBe(
             'https://img.youtube.com/vi/abc/mqdefault.jpg',
         )
+        expect(getThumbnailUrl('a/b"c')).toBe(
+            'https://img.youtube.com/vi/a%2Fb%22c/mqdefault.jpg',
+        )
     })
 
     it('detects watch page and video id', () => {
@@ -94,6 +97,8 @@ describe('youtube helpers', () => {
         document.body.innerHTML = ''
         const handle = waitForVideoElement(10)
         vi.advanceTimersByTime(11)
-        await expect(handle.promise).rejects.toThrow('timeout waiting for video')
+        await expect(handle.promise).rejects.toThrow(
+            'timeout waiting for video',
+        )
     })
 })

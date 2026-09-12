@@ -428,4 +428,39 @@ describe('popup', () => {
         expect(empty?.textContent).toBe('No unfinished videos match "UNFIN".')
         expect(search.value).toBe('UNFIN')
     })
+
+    it('preserves quotes in channel names when ignoring and restoring them', async () => {
+        videos = [
+            { ...seedVideos[0], channel: 'A "quoted" & <special> channel' },
+        ]
+        document.dispatchEvent(new Event('DOMContentLoaded'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        document.querySelector<HTMLButtonElement>('.ignore-btn')!.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(ignored).toEqual(['a "quoted" & <special> channel'])
+        document.querySelector<HTMLButtonElement>('.ignored-remove')!.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(ignored).toEqual([])
+        expect(document.querySelector('.channel')?.textContent).toBe(
+            videos[0].channel,
+        )
+    })
+
+    it('treats stored IDs as data in card attributes and thumbnail URLs', async () => {
+        const videoId = 'id" data-injected="yes'
+        videos = [{ ...seedVideos[0], videoId }]
+        document.dispatchEvent(new Event('DOMContentLoaded'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(document.querySelector('[data-injected]')).toBeNull()
+        expect(
+            document.querySelector<HTMLElement>('.card')?.dataset.videoId,
+        ).toBe(videoId)
+        const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+        document.querySelector<HTMLButtonElement>('.last-btn')!.click()
+        expect(openSpy).toHaveBeenCalledWith(
+            `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}&t=30s`,
+            '_blank',
+        )
+        openSpy.mockRestore()
+    })
 })

@@ -163,10 +163,11 @@ function render(): void {
             const channel = item.channel || DEFAULT_CHANNEL_NAME
             const lastPercent = formatPercent(item.t, item.duration)
             const furthestPercent = formatPercent(item.ft, item.duration)
-            const thumb = getThumbnailUrl(item.videoId)
+            const thumb = escapeHtml(getThumbnailUrl(item.videoId))
+            const videoId = escapeHtml(item.videoId)
             const canIgnore = channel !== DEFAULT_CHANNEL_NAME
             return `
-        <div class="card" data-video-id="${item.videoId}">
+        <div class="card" data-video-id="${videoId}">
           <div class="card-content">
             <div class="thumbnail">
               <img src="${thumb}" alt="" loading="lazy">
@@ -188,12 +189,12 @@ function render(): void {
             </div>
           </div>
           <div class="actions">
-            <button class="action-btn last-btn" title="Watch from last watched time" data-video-id="${item.videoId}" data-time="${item.t}">
+            <button class="action-btn last-btn" title="Watch from last watched time" data-video-id="${videoId}" data-time="${item.t}">
               <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="5 3 19 12 5 21 5 3"></polygon>
               </svg>
             </button>
-            <button class="action-btn furthest-btn" title="Watch from furthest watched time" data-video-id="${item.videoId}" data-time="${item.ft}">
+            <button class="action-btn furthest-btn" title="Watch from furthest watched time" data-video-id="${videoId}" data-time="${item.ft}">
               <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="13 19 22 12 13 5 13 19"></polygon>
                 <polygon points="2 19 11 12 2 5 2 19"></polygon>
@@ -207,7 +208,7 @@ function render(): void {
                 <line x1="4.9" y1="4.9" x2="19.1" y2="19.1"></line>
               </svg>
             </button>
-            <button class="action-btn delete-btn" title="Remove from list" data-video-id="${item.videoId}">
+            <button class="action-btn delete-btn" title="Remove from list" data-video-id="${videoId}">
               <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -316,9 +317,12 @@ function render(): void {
 }
 
 function escapeHtml(value: string): string {
-    const div = document.createElement('div')
-    div.textContent = value
-    return div.innerHTML
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
 }
 
 async function refreshData(): Promise<void> {
