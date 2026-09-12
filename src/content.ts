@@ -298,12 +298,16 @@ export const handleUrlChange: UrlChangeHandler = () => {
 const debouncedHandleUrlChange = debounce(handleUrlChange, 150)
 
 function cleanupGlobalListeners(): void {
+    debouncedHandleUrlChange.cancel()
     if (unwatchUrlChanges) {
         unwatchUrlChanges()
         unwatchUrlChanges = null
     }
     if (beforeUnloadAttached) {
-        window.removeEventListener('yt-navigate-finish', debouncedHandleUrlChange)
+        window.removeEventListener(
+            'yt-navigate-finish',
+            debouncedHandleUrlChange,
+        )
         window.removeEventListener('beforeunload', onBeforeUnload)
         beforeUnloadAttached = false
     }

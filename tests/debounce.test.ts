@@ -18,4 +18,18 @@ describe('debounce', () => {
         expect(fn).toHaveBeenCalledTimes(1)
         expect(fn).toHaveBeenCalledWith('b')
     })
+
+    it('cancels pending calls and can be reused', () => {
+        vi.useFakeTimers()
+        const fn = vi.fn()
+        const debounced = debounce(fn, 100)
+        debounced('cancelled')
+        debounced.cancel()
+        vi.runAllTimers()
+        expect(fn).not.toHaveBeenCalled()
+        debounced('next')
+        vi.runAllTimers()
+        expect(fn).toHaveBeenCalledTimes(1)
+        expect(fn).toHaveBeenCalledWith('next')
+    })
 })

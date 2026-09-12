@@ -1,10 +1,18 @@
 export function debounce<T extends (...args: never[]) => unknown>(
     func: T,
     delay: number,
-): (...args: Parameters<T>) => void {
+): ((...args: Parameters<T>) => void) & { cancel: () => void } {
     let timeoutId: number | undefined = undefined
-    return function (...args: Parameters<T>) {
+    const debounced = (...args: Parameters<T>) => {
         clearTimeout(timeoutId)
-        timeoutId = setTimeout(() => func(...args), delay)
+        timeoutId = setTimeout(() => {
+            timeoutId = undefined
+            func(...args)
+        }, delay)
     }
+    debounced.cancel = () => {
+        clearTimeout(timeoutId)
+        timeoutId = undefined
+    }
+    return debounced
 }

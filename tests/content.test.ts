@@ -27,7 +27,9 @@ vi.mock('../src/spa', () => ({
     watchUrlChanges: vi.fn(() => vi.fn()),
 }))
 vi.mock('../src/util', () => ({ log: vi.fn() }))
-vi.mock('../src/debounce', () => ({ debounce: (fn: () => void) => fn }))
+vi.mock('../src/debounce', () => ({
+    debounce: (fn: () => void) => Object.assign(fn, { cancel: vi.fn() }),
+}))
 
 describe('content script', () => {
     beforeEach(async () => {
@@ -53,7 +55,10 @@ describe('content script', () => {
     it('saves video state when safe', async () => {
         const mod = await import('../src/content')
         const video = document.createElement('video')
-        Object.defineProperty(video, 'currentTime', { value: 42, writable: true })
+        Object.defineProperty(video, 'currentTime', {
+            value: 42,
+            writable: true,
+        })
         Object.defineProperty(video, 'duration', { value: 100 })
 
         mod.__testing.setActive('vid1', video)
@@ -71,7 +76,10 @@ describe('content script', () => {
     it('skips saving and resuming for ignored channels', async () => {
         const mod = await import('../src/content')
         const video = document.createElement('video')
-        Object.defineProperty(video, 'currentTime', { value: 42, writable: true })
+        Object.defineProperty(video, 'currentTime', {
+            value: 42,
+            writable: true,
+        })
         Object.defineProperty(video, 'duration', { value: 100 })
 
         storageMocks.getIgnoredChannels.mockResolvedValue(['channel'])
@@ -95,7 +103,10 @@ describe('content script', () => {
     it('skips saving and resuming when disabled', async () => {
         const mod = await import('../src/content')
         const video = document.createElement('video')
-        Object.defineProperty(video, 'currentTime', { value: 42, writable: true })
+        Object.defineProperty(video, 'currentTime', {
+            value: 42,
+            writable: true,
+        })
         Object.defineProperty(video, 'duration', { value: 100 })
 
         storageMocks.getEnabled.mockResolvedValue(false)
@@ -118,7 +129,10 @@ describe('content script', () => {
     it('skips saving when conditions fail', async () => {
         const mod = await import('../src/content')
         const video = document.createElement('video')
-        Object.defineProperty(video, 'currentTime', { value: 0, writable: true })
+        Object.defineProperty(video, 'currentTime', {
+            value: 0,
+            writable: true,
+        })
         Object.defineProperty(video, 'duration', { value: 100 })
 
         mod.__testing.setActive('vid1', video)
@@ -126,7 +140,10 @@ describe('content script', () => {
         expect(storageMocks.setVideoState).not.toHaveBeenCalled()
 
         youtubeMocks.isWatchPage.mockReturnValue(false)
-        Object.defineProperty(video, 'currentTime', { value: 10, writable: true })
+        Object.defineProperty(video, 'currentTime', {
+            value: 10,
+            writable: true,
+        })
         await mod.saveNow('test')
         expect(storageMocks.setVideoState).not.toHaveBeenCalled()
     })
@@ -134,7 +151,10 @@ describe('content script', () => {
     it('respects minimum write gap', async () => {
         const mod = await import('../src/content')
         const video = document.createElement('video')
-        Object.defineProperty(video, 'currentTime', { value: 10, writable: true })
+        Object.defineProperty(video, 'currentTime', {
+            value: 10,
+            writable: true,
+        })
         Object.defineProperty(video, 'duration', { value: 100 })
         mod.__testing.setActive('vid1', video)
         mod.__testing.setLastWriteAt(Date.now())
@@ -146,7 +166,10 @@ describe('content script', () => {
     it('resumes to saved position and reapplies if needed', async () => {
         const mod = await import('../src/content')
         const video = document.createElement('video')
-        Object.defineProperty(video, 'currentTime', { value: 0, writable: true })
+        Object.defineProperty(video, 'currentTime', {
+            value: 0,
+            writable: true,
+        })
         Object.defineProperty(video, 'duration', { value: 200 })
 
         storageMocks.getVideoState.mockResolvedValue({
@@ -173,7 +196,10 @@ describe('content script', () => {
     it('does not resume when guards fail', async () => {
         const mod = await import('../src/content')
         const video = document.createElement('video')
-        Object.defineProperty(video, 'currentTime', { value: 10, writable: true })
+        Object.defineProperty(video, 'currentTime', {
+            value: 10,
+            writable: true,
+        })
         Object.defineProperty(video, 'duration', { value: 200 })
 
         storageMocks.getVideoState.mockResolvedValue({
@@ -223,7 +249,10 @@ describe('content script', () => {
     it('uses defaults for missing title/channel and handles infinite duration', async () => {
         const mod = await import('../src/content')
         const video = document.createElement('video')
-        Object.defineProperty(video, 'currentTime', { value: 12, writable: true })
+        Object.defineProperty(video, 'currentTime', {
+            value: 12,
+            writable: true,
+        })
         Object.defineProperty(video, 'duration', { value: Infinity })
         youtubeMocks.getVideoTitle.mockReturnValue(null)
         youtubeMocks.getChannelName.mockReturnValue(null)
@@ -255,7 +284,10 @@ describe('content script', () => {
     it('saves on interval loop', async () => {
         const mod = await import('../src/content')
         const video = document.createElement('video')
-        Object.defineProperty(video, 'currentTime', { value: 22, writable: true })
+        Object.defineProperty(video, 'currentTime', {
+            value: 22,
+            writable: true,
+        })
         Object.defineProperty(video, 'duration', { value: 100 })
         mod.__testing.setActive('vid1', video)
 
