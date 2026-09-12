@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { deferred } from './helpers'
 
 const seedVideos = [
     {
@@ -98,6 +99,7 @@ describe('popup', () => {
         </nav>
       </header>
       <main>
+        <p id="error" class="hidden" role="alert"></p>
         <section id="video-view" class="video-view">
           <section class="search">
             <label class="search-label" for="video-search">Search videos</label>
@@ -428,6 +430,87 @@ describe('popup', () => {
         await new Promise((resolve) => setTimeout(resolve, 0))
         expect(enabled).toBe(false)
         expect(document.body.classList.contains('is-disabled')).toBe(true)
+    })
+
+    it('restores the toggle after a failed write and allows retry', async () => {
+        const storage = await import('../src/storage')
+        vi.mocked(storage.setEnabled).mockRejectedValueOnce(
+            new Error('unavailable'),
+        )
+        const toggle = document.getElementById(
+            'toggle-enabled',
+        ) as HTMLInputElement
+        toggle.checked = false
+        toggle.dispatchEvent(new Event('change'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(toggle.checked).toBe(true)
+        expect(
+            document.getElementById('error')!.classList.contains('hidden'),
+        ).toBe(false)
+        toggle.checked = false
+        toggle.dispatchEvent(new Event('change'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(enabled).toBe(false)
+        expect(
+            document.getElementById('error')!.classList.contains('hidden'),
+        ).toBe(true)
+    })
+
+    it('keeps the last toggle choice when the first write is slow', async () => {
+        const storage = await import('../src/storage')
+        const write = deferred<void>()
+        vi.mocked(storage.setEnabled).mockImplementationOnce(async (value) => {
+            await write.promise
+            enabled = value
+        })
+        const toggle = document.getElementById(
+            'toggle-enabled',
+        ) as HTMLInputElement
+        toggle.checked = false
+        toggle.dispatchEvent(new Event('change'))
+        toggle.checked = true
+        toggle.dispatchEvent(new Event('change'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        write.resolve(undefined)
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(enabled).toBe(true)
+        expect(toggle.checked).toBe(true)
+    })
+
+    it('does not apply an old initial load after a newer setting change', async () => {
+        const storage = await import('../src/storage')
+        const oldLoad =
+            deferred<Awaited<ReturnType<typeof storage.getPopupData>>>()
+        vi.mocked(storage.getPopupData).mockReturnValueOnce(oldLoad.promise)
+        setBaseDom()
+        vi.resetModules()
+        await import('../src/popup')
+        document.dispatchEvent(new Event('DOMContentLoaded'))
+        const toggle = document.getElementById(
+            'toggle-enabled',
+        ) as HTMLInputElement
+        toggle.checked = false
+        toggle.dispatchEvent(new Event('change'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        oldLoad.resolve({ videos, ignoredChannels: [], enabled: true })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(toggle.checked).toBe(false)
+        expect(document.body.classList.contains('is-disabled')).toBe(true)
+    })
+
+    it('shows a useful message when saved videos cannot load', async () => {
+        const storage = await import('../src/storage')
+        vi.mocked(storage.getPopupData).mockRejectedValueOnce(
+            new Error('unavailable'),
+        )
+        setBaseDom()
+        vi.resetModules()
+        await import('../src/popup')
+        document.dispatchEvent(new Event('DOMContentLoaded'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(document.getElementById('error')!.textContent).toContain(
+            'Could not load saved videos',
+        )
     })
 
     it('opens videos on card or buttons', () => {

@@ -38,6 +38,14 @@
     box-sizing: border-box;
 }
 
+.error {
+    padding: 12px;
+    border: 1px solid var(--stroke);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--ink);
+}
+
 body {
     margin: 0;
     font-family:
@@ -650,7 +658,11 @@ main::-webkit-scrollbar-thumb:hover {
 .fill.furthest {
     background: var(--bar-bg);
     /* We'll use a semi-transparent version of the accent for furthest */
-    background: linear-gradient(90deg, var(--accent-weak), var(--accent-weak-2));
+    background: linear-gradient(
+        90deg,
+        var(--accent-weak),
+        var(--accent-weak-2)
+    );
 }
 
 .fill.last {

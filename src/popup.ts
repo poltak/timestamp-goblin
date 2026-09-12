@@ -32,6 +32,8 @@ let searchQuery = ''
 let videoSearchIndex: VideoSearchIndex | null = null
 let settingsOpen = false
 let renderedItems: VideoItem[] = []
+let refreshVersion = 0
+let mutationQueue = Promise.resolve()
 
 function categorizeVideo(state: StoredVideoState): Tab {
     if (!Number.isFinite(state.duration)) {
@@ -242,7 +244,12 @@ function escapeHtml(value: string): string {
 }
 
 async function refreshData(): Promise<void> {
-    const data = await getPopupData()
+    const version = ++refreshVersion
+    const data = await getPopupData().catch((error: unknown) => {
+        if (version === refreshVersion) throw error
+        return null
+    })
+    if (!data || version !== refreshVersion) return
     videoSearchIndex = buildVideoSearchIndex(data.videos)
     ignoredChannels = data.ignoredChannels
     enabled = data.enabled
@@ -263,7 +270,27 @@ async function refreshData(): Promise<void> {
     render()
 }
 
-async function handleVideoClick(event: Event): Promise<void> {
+function showError(message: string): void {
+    const error = document.getElementById('error')
+    if (!error) return
+    error.textContent = message
+    error.classList.toggle('hidden', !message)
+}
+
+function runMutation(operation: () => Promise<unknown>): void {
+    mutationQueue = mutationQueue.then(async () => {
+        try {
+            await operation()
+            await refreshData()
+            showError('')
+        } catch {
+            render()
+            showError('Could not update saved videos. Try again.')
+        }
+    })
+}
+
+function handleVideoClick(event: Event): void {
     if (!(event.target instanceof Element)) return
     const card = event.target.closest<HTMLElement>('.card')
     const id = card?.dataset.videoId
@@ -271,27 +298,24 @@ async function handleVideoClick(event: Event): Promise<void> {
     const button = event.target.closest<HTMLButtonElement>('.action-btn')
     if (button?.disabled) return
     if (button?.classList.contains('delete-btn')) {
-        await deleteVideoState(id)
-        await refreshData()
+        runMutation(() => deleteVideoState(id))
     } else if (button?.classList.contains('ignore-btn')) {
         const channel = button.dataset.channel
         if (channel) {
-            await addIgnoredChannel(channel)
-            await refreshData()
+            runMutation(() => addIgnoredChannel(channel))
         }
     } else {
         openVideo(id, Number(button?.dataset.time ?? card?.dataset.time))
     }
 }
 
-async function handleIgnoredClick(event: Event): Promise<void> {
+function handleIgnoredClick(event: Event): void {
     if (!(event.target instanceof Element)) return
     const channel =
         event.target.closest<HTMLButtonElement>('.ignored-remove')?.dataset
             .channel
     if (channel) {
-        await removeIgnoredChannel(channel)
-        await refreshData()
+        runMutation(() => removeIgnoredChannel(channel))
     }
 }
 
@@ -322,10 +346,9 @@ document.addEventListener(
             'toggle-enabled',
         ) as HTMLInputElement | null
         if (toggle) {
-            toggle.addEventListener('change', async () => {
-                enabled = toggle.checked
-                await setEnabled(enabled)
-                render()
+            toggle.addEventListener('change', () => {
+                const nextEnabled = toggle.checked
+                runMutation(() => setEnabled(nextEnabled))
             })
         }
 
@@ -339,7 +362,13 @@ document.addEventListener(
             })
         }
 
-        await refreshData()
+        try {
+            await refreshData()
+        } catch {
+            showError(
+                'Could not load saved videos. Reopen this popup to try again.',
+            )
+        }
     },
     { once: true },
 )
