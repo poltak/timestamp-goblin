@@ -41,14 +41,16 @@ let hasInit = false
 let beforeUnloadAttached = false
 
 if (DEBUG) {
-    globalThis['getState'] = () => ({
-        activeVideo,
-        activeVideoId,
-        lastWriteAt,
-        initToken,
-        waitHandle,
-        resumeReapplyId,
-        saveIntervalId,
+    Object.assign(globalThis, {
+        getState: () => ({
+            activeVideo,
+            activeVideoId,
+            lastWriteAt,
+            initToken,
+            waitHandle,
+            resumeReapplyId,
+            saveIntervalId,
+        }),
     })
 }
 

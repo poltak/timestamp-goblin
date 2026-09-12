@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MIN_RESUME_SECONDS, NEAR_START_WINDOW_SECONDS } from '../src/constants'
 import { deferred } from './helpers'
+import type { StoredVideoState } from '../src/types'
 
 const storageMocks = {
-    getVideoState: vi.fn(async () => null),
-    setVideoState: vi.fn(async () => {}),
-    getIgnoredChannels: vi.fn(async () => []),
+    getVideoState: vi.fn<(videoId: string) => Promise<StoredVideoState | null>>(
+        async () => null,
+    ),
+    setVideoState: vi.fn<
+        (videoId: string, state: StoredVideoState) => Promise<void>
+    >(async () => {}),
+    getIgnoredChannels: vi.fn<() => Promise<string[]>>(async () => []),
     normalizeChannelName: (value: string) => value.trim().toLowerCase(),
     getEnabled: vi.fn(async () => true),
 }
@@ -14,9 +19,9 @@ const youtubeMocks = {
     clampResumeTarget: vi.fn((t: number, duration: number) =>
         Math.min(Math.max(t, 0), duration - 0.5),
     ),
-    getChannelName: vi.fn(() => 'Channel'),
+    getChannelName: vi.fn<() => string | null>(() => 'Channel'),
     getVideoId: vi.fn(() => 'vid1'),
-    getVideoTitle: vi.fn(() => 'Title'),
+    getVideoTitle: vi.fn<() => string | null>(() => 'Title'),
     isLiveVideo: vi.fn(() => false),
     isWatchPage: vi.fn(() => true),
     waitForVideoElement: vi.fn(),

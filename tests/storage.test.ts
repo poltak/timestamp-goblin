@@ -7,7 +7,7 @@ import {
 } from '../src/storage'
 import type { StoredVideoState } from '../src/types'
 
-type Store = Record<string, StoredVideoState>
+type Store = Record<string, unknown>
 
 describe('storage', () => {
     let store: Store
@@ -49,7 +49,7 @@ describe('storage', () => {
 
     it('returns null for missing or invalid state', async () => {
         expect(await getVideoState('missing')).toBeNull()
-        await setVideoState('bad', { t: 'nope' } as StoredVideoState)
+        await chrome.storage.local.set({ 'ytp:bad': { t: 'nope' } })
         expect(await getVideoState('bad')).toBeNull()
     })
 

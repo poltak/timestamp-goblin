@@ -69,6 +69,8 @@ export function compareChromeVersions(left, right) {
 
 /**
  * Validate that all package metadata uses the manifest version.
+ * @param {{ manifestVersion: string, packageVersion: string, lockfileVersion?: string,
+ *   lockfilePackageVersion?: string, packageManager?: string }} metadata
  */
 export function validateReleaseMetadata({
     manifestVersion,
@@ -98,6 +100,9 @@ export function validateReleaseMetadata({
 
 /**
  * Decide whether a push contains a publishable version bump.
+ * @param {{ currentManifestVersion: string, previousManifestVersion: string,
+ *   packageVersion: string, lockfileVersion?: string, lockfilePackageVersion?: string,
+ *   packageManager?: string }} metadata
  */
 export function decideRelease({
     currentManifestVersion,
