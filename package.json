@@ -15,6 +15,7 @@
         "package": "pnpm run build:prod && node scripts/package.mjs",
         "format": "prettier --write \"**/*.{ts,json,md}\"",
         "test": "vitest",
+        "test:popup": "pnpm run build && node scripts/check-popup.mjs",
         "test:run": "vitest run"
     },
     "devDependencies": {
