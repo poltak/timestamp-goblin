@@ -141,13 +141,15 @@ binding. Otherwise Google will reject the GitHub token.
 
 Chrome requires a manifest version with one to four dot-separated integers. Each
 part must be from `0` to `65535`, with no leading zeroes, and the complete
-version cannot be all zero. The workflow also requires the version in all of
-these locations to match:
+version cannot be all zero. The workflow requires the versions in these files
+to match:
 
 - `src/manifest.json`
 - `package.json`
-- `package-lock.json` top-level `version`
-- `package-lock.json` `packages[""].version`
+
+For npm checkouts, both version fields in `package-lock.json` must also match.
+For pnpm checkouts, `pnpm-lock.yaml` must exist. That lockfile does not store the
+root package version; the frozen install checks its dependency entries.
 
 The current manifest version must be greater than the version before the push.
 This comparison also works when one push contains multiple commits. An equal
@@ -172,7 +174,7 @@ Common recovery steps:
   variables, the provider resource name, the OIDC condition, the principal-set
   binding, and the service-account email added in the Chrome Web Store
   dashboard.
-- **Version mismatch:** update all four version locations and commit them
+- **Version mismatch:** update all applicable version locations and commit them
   together. Do not edit only the manifest.
 - **Equal version:** this is an intentional skip. Increase the version for a
   new store upload.

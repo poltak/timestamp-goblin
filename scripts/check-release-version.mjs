@@ -1,4 +1,4 @@
-import { appendFile, readFile } from 'node:fs/promises'
+import { access, appendFile, readFile } from 'node:fs/promises'
 import { promisify } from 'node:util'
 import { execFile } from 'node:child_process'
 import { resolve } from 'node:path'
@@ -75,14 +75,17 @@ export function validateReleaseMetadata({
     packageVersion,
     lockfileVersion,
     lockfilePackageVersion,
+    packageManager,
 }) {
     parseChromeVersion(manifestVersion)
 
-    const metadata = [
-        ['package.json', packageVersion],
-        ['package-lock.json', lockfileVersion],
-        ['package-lock.json packages[""].version', lockfilePackageVersion],
-    ]
+    const metadata = [['package.json', packageVersion]]
+    if (!packageManager?.startsWith('pnpm@')) {
+        metadata.push(
+            ['package-lock.json', lockfileVersion],
+            ['package-lock.json packages[""].version', lockfilePackageVersion],
+        )
+    }
 
     for (const [location, version] of metadata) {
         if (version !== manifestVersion) {
@@ -102,12 +105,14 @@ export function decideRelease({
     packageVersion,
     lockfileVersion,
     lockfilePackageVersion,
+    packageManager,
 }) {
     validateReleaseMetadata({
         manifestVersion: currentManifestVersion,
         packageVersion,
         lockfileVersion,
         lockfilePackageVersion,
+        packageManager,
     })
 
     const comparison = compareChromeVersions(
@@ -132,18 +137,25 @@ async function readJson(path) {
     return JSON.parse(await readFile(path, 'utf8'))
 }
 
-async function readCurrentMetadata(rootDir) {
-    const [manifest, packageJson, packageLock] = await Promise.all([
+export async function readCurrentMetadata(rootDir) {
+    const [manifest, packageJson] = await Promise.all([
         readJson(resolve(rootDir, 'src/manifest.json')),
         readJson(resolve(rootDir, 'package.json')),
-        readJson(resolve(rootDir, 'package-lock.json')),
     ])
+
+    let packageLock
+    if (packageJson.packageManager?.startsWith('pnpm@')) {
+        await access(resolve(rootDir, 'pnpm-lock.yaml'))
+    } else {
+        packageLock = await readJson(resolve(rootDir, 'package-lock.json'))
+    }
 
     return {
         currentManifestVersion: manifest.version,
         packageVersion: packageJson.version,
-        lockfileVersion: packageLock.version,
-        lockfilePackageVersion: packageLock.packages?.['']?.version,
+        packageManager: packageJson.packageManager,
+        lockfileVersion: packageLock?.version,
+        lockfilePackageVersion: packageLock?.packages?.['']?.version,
     }
 }
 

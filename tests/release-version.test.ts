@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
     compareChromeVersions,
     decideRelease,
     parseChromeVersion,
     validateReleaseMetadata,
+    readCurrentMetadata,
 } from '../scripts/check-release-version.mjs'
 
 describe('Chrome extension release versions', () => {
@@ -94,5 +98,43 @@ describe('Chrome extension release versions', () => {
                 lockfilePackageVersion: undefined,
             }),
         ).toThrow(/packages\[""\]/i)
+    })
+
+    it('checks a pnpm checkout without an npm lockfile', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'goblin-release-'))
+        try {
+            await mkdir(join(root, 'src'))
+            await writeFile(
+                join(root, 'src/manifest.json'),
+                JSON.stringify({ version: '0.1.5' }),
+            )
+            await writeFile(
+                join(root, 'package.json'),
+                JSON.stringify({
+                    version: '0.1.5',
+                    packageManager: 'pnpm@11.25.0',
+                }),
+            )
+            await writeFile(
+                join(root, 'pnpm-lock.yaml'),
+                'lockfileVersion: 9.0\n',
+            )
+            const metadata = await readCurrentMetadata(root)
+            expect(
+                decideRelease({ ...metadata, previousManifestVersion: '0.1.4' })
+                    .release,
+            ).toBe(true)
+            expect(() =>
+                decideRelease({
+                    ...metadata,
+                    previousManifestVersion: '0.1.5',
+                    packageVersion: '0.1.4',
+                }),
+            ).toThrow(/package\.json/)
+            await rm(join(root, 'pnpm-lock.yaml'))
+            await expect(readCurrentMetadata(root)).rejects.toThrow(/pnpm-lock/)
+        } finally {
+            await rm(root, { recursive: true, force: true })
+        }
     })
 })
