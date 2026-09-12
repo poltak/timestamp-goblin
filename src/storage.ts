@@ -48,8 +48,7 @@ export function normalizeChannelName(name: string): string {
     return name.trim().toLowerCase()
 }
 
-export async function getAllVideoStates(): Promise<VideoItem[]> {
-    const all = await chrome.storage.local.get()
+function readVideoStates(all: Record<string, unknown>): VideoItem[] {
     const items: VideoItem[] = []
     for (const [key, value] of Object.entries(all)) {
         if (
@@ -65,6 +64,24 @@ export async function getAllVideoStates(): Promise<VideoItem[]> {
             })
     }
     return items
+}
+
+export async function getAllVideoStates(): Promise<VideoItem[]> {
+    return readVideoStates(await chrome.storage.local.get())
+}
+
+export async function getPopupData(): Promise<{
+    videos: VideoItem[]
+    ignoredChannels: string[]
+    enabled: boolean
+}> {
+    const all = await chrome.storage.local.get()
+    return {
+        videos: readVideoStates(all),
+        ignoredChannels: readIgnoredChannels(all[IGNORED_CHANNELS_KEY]),
+        enabled:
+            typeof all[ENABLED_KEY] === 'boolean' ? all[ENABLED_KEY] : true,
+    }
 }
 
 export async function getVideoState(

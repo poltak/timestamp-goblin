@@ -176,6 +176,28 @@ describe('storage', () => {
         ])
     })
 
+    it('loads popup records and settings in one storage call', async () => {
+        const { getPopupData } = await import('../src/storage')
+        await chrome.storage.local.set({
+            enabled: false,
+            'ignored:channels': [' Channel '],
+            'ytp:legacy': { t: 20, updatedAt: 1 },
+        })
+        const data = await getPopupData()
+        expect(data.enabled).toBe(false)
+        expect(data.ignoredChannels).toEqual(['channel'])
+        expect(data.videos).toEqual([
+            expect.objectContaining({
+                videoId: 'legacy',
+                t: 20,
+                ft: 20,
+                title: 'Untitled video',
+            }),
+        ])
+        expect(chrome.storage.local.get).toHaveBeenCalledTimes(1)
+        expect(chrome.storage.local.get).toHaveBeenCalledWith()
+    })
+
     it('deletes state', async () => {
         await setVideoState('gone', {
             t: 1,

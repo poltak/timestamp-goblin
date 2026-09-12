@@ -34,7 +34,11 @@ let ignored: string[] = []
 let enabled = true
 
 vi.mock('../src/storage', () => ({
-    getAllVideoStates: vi.fn(async () => videos),
+    getPopupData: vi.fn(async () => ({
+        videos,
+        ignoredChannels: ignored,
+        enabled,
+    })),
     deleteVideoState: vi.fn(async (id: string) => {
         videos = videos.filter((v) => v.videoId !== id)
     }),
@@ -258,6 +262,39 @@ describe('popup', () => {
         expect(search.value).toBe('CHAN')
     })
 
+    it('reuses search data and listeners while typing', async () => {
+        const searchModule = await import('../src/search')
+        const buildIndex = vi.spyOn(searchModule, 'buildVideoSearchIndex')
+        const addListener = vi.spyOn(EventTarget.prototype, 'addEventListener')
+        const ignoredNode = document.getElementById('ignored-list')!.firstChild
+        const input = document.getElementById(
+            'video-search',
+        ) as HTMLInputElement
+        for (const query of ['unfin', 'chan', 'missing', '']) {
+            input.value = query
+            input.dispatchEvent(new Event('input'))
+        }
+        expect(buildIndex).not.toHaveBeenCalled()
+        expect(addListener).not.toHaveBeenCalled()
+        expect(document.getElementById('ignored-list')!.firstChild).toBe(
+            ignoredNode,
+        )
+        buildIndex.mockRestore()
+        addListener.mockRestore()
+    })
+
+    it('keeps existing cards when a search prefix matches the same items', () => {
+        const input = document.getElementById(
+            'video-search',
+        ) as HTMLInputElement
+        const card = document.querySelector('.card')
+        for (const query of ['un', 'unfi', 'UNFIN']) {
+            input.value = query
+            input.dispatchEvent(new Event('input'))
+            expect(document.querySelector('.card')).toBe(card)
+        }
+    })
+
     it('shows a distinct no-results state and restores results when cleared', () => {
         const search = document.getElementById(
             'video-search',
@@ -433,6 +470,9 @@ describe('popup', () => {
         videos = [
             { ...seedVideos[0], channel: 'A "quoted" & <special> channel' },
         ]
+        setBaseDom()
+        vi.resetModules()
+        await import('../src/popup')
         document.dispatchEvent(new Event('DOMContentLoaded'))
         await new Promise((resolve) => setTimeout(resolve, 0))
         document.querySelector<HTMLButtonElement>('.ignore-btn')!.click()
@@ -449,6 +489,9 @@ describe('popup', () => {
     it('treats stored IDs as data in card attributes and thumbnail URLs', async () => {
         const videoId = 'id" data-injected="yes'
         videos = [{ ...seedVideos[0], videoId }]
+        setBaseDom()
+        vi.resetModules()
+        await import('../src/popup')
         document.dispatchEvent(new Event('DOMContentLoaded'))
         await new Promise((resolve) => setTimeout(resolve, 0))
         expect(document.querySelector('[data-injected]')).toBeNull()

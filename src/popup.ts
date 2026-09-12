@@ -1,9 +1,7 @@
 import {
     addIgnoredChannel,
     deleteVideoState,
-    getEnabled,
-    getAllVideoStates,
-    getIgnoredChannels,
+    getPopupData,
     normalizeChannelName,
     removeIgnoredChannel,
     setEnabled,
@@ -23,12 +21,17 @@ import type { VideoSearchIndex } from './search'
 type Tab = 'unfinished' | 'unwatched' | 'finished'
 
 let currentTab: Tab = 'unfinished'
-let allVideos: VideoItem[] = []
+let videosByTab: Record<Tab, VideoItem[]> = {
+    unfinished: [],
+    unwatched: [],
+    finished: [],
+}
 let ignoredChannels: string[] = []
 let enabled = true
 let searchQuery = ''
 let videoSearchIndex: VideoSearchIndex | null = null
 let settingsOpen = false
+let renderedItems: VideoItem[] = []
 
 function categorizeVideo(state: StoredVideoState): Tab {
     if (!Number.isFinite(state.duration)) {
@@ -65,7 +68,6 @@ function openVideo(videoId: string, time?: number): void {
 function render(): void {
     const root = document.getElementById('list')
     const empty = document.getElementById('empty')
-    const ignoredRoot = document.getElementById('ignored-list')
     const videoView = document.getElementById('video-view')
     const settingsView = document.getElementById('settings-view')
     const settingsToggle = document.getElementById('settings-toggle')
@@ -94,36 +96,18 @@ function render(): void {
     videoView?.setAttribute('aria-hidden', String(settingsOpen))
     settingsView?.setAttribute('aria-hidden', String(!settingsOpen))
 
-    const ignoredSet = new Set(ignoredChannels)
-    const visibleVideos = allVideos.filter((v) => {
-        const channel = v.channel || DEFAULT_CHANNEL_NAME
-        return !ignoredSet.has(normalizeChannelName(channel))
-    })
-
     const normalizedSearchQuery = searchQuery.trim()
     const matchingVideoIds =
         normalizedSearchQuery && videoSearchIndex
             ? findVideoIds(videoSearchIndex, normalizedSearchQuery)
             : null
-    const searchedVideos = normalizedSearchQuery
-        ? visibleVideos.filter(
-              (video) => matchingVideoIds?.has(video.videoId) ?? false,
-          )
-        : visibleVideos
-
-    const items = searchedVideos
-        .filter((v) => categorizeVideo(v) === currentTab)
-        .sort((a, b) => b.updatedAt - a.updatedAt)
-        .slice(0, MAX_POPUP_ITEMS)
-
-    const counts: Record<Tab, number> = {
-        unfinished: 0,
-        unwatched: 0,
-        finished: 0,
+    const items: VideoItem[] = []
+    for (const video of videosByTab[currentTab]) {
+        if (normalizedSearchQuery && !matchingVideoIds?.has(video.videoId))
+            continue
+        items.push(video)
+        if (items.length === MAX_POPUP_ITEMS) break
     }
-    visibleVideos.forEach((v) => {
-        counts[categorizeVideo(v)]++
-    })
 
     document.querySelectorAll('.tab-btn').forEach((btn) => {
         const tab = (btn as HTMLElement).dataset.tab as Tab
@@ -134,7 +118,7 @@ function render(): void {
         }
 
         let badge = btn.querySelector('.tab-count')
-        const count = counts[tab]
+        const count = videosByTab[tab].length
         if (count > 0) {
             if (!badge) {
                 badge = document.createElement('span')
@@ -148,7 +132,6 @@ function render(): void {
     })
 
     if (items.length === 0) {
-        root.innerHTML = ''
         empty.classList.remove('hidden')
         empty.textContent = normalizedSearchQuery
             ? `No ${currentTab} videos match "${normalizedSearchQuery}".`
@@ -157,6 +140,12 @@ function render(): void {
         empty.classList.add('hidden')
     }
 
+    if (
+        items.length === renderedItems.length &&
+        items.every((item, index) => item === renderedItems[index])
+    )
+        return
+    renderedItems = items
     root.innerHTML = items
         .map((item) => {
             const title = item.title || DEFAULT_VIDEO_TITLE
@@ -167,7 +156,7 @@ function render(): void {
             const videoId = escapeHtml(item.videoId)
             const canIgnore = channel !== DEFAULT_CHANNEL_NAME
             return `
-        <div class="card" data-video-id="${videoId}">
+        <div class="card" data-video-id="${videoId}" data-time="${item.t}">
           <div class="card-content">
             <div class="thumbnail">
               <img src="${thumb}" alt="" loading="lazy">
@@ -219,70 +208,10 @@ function render(): void {
       `
         })
         .join('')
+}
 
-    root.querySelectorAll<HTMLDivElement>('div.card').forEach((card) => {
-        card.addEventListener('click', (e) => {
-            const target = e.target as HTMLElement
-            if (target.closest('.action-btn')) {
-                return
-            }
-            const id = card.dataset.videoId
-            if (id) {
-                // Default to last watched time if clicking the card
-                const item = allVideos.find((v) => v.videoId === id)
-                openVideo(id, item?.t)
-            }
-        })
-    })
-
-    root.querySelectorAll<HTMLButtonElement>('button.last-btn').forEach(
-        (btn) => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation()
-                const id = btn.dataset.videoId
-                const time = parseFloat(btn.dataset.time || '0')
-                if (id) openVideo(id, time)
-            })
-        },
-    )
-
-    root.querySelectorAll<HTMLButtonElement>('button.furthest-btn').forEach(
-        (btn) => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation()
-                const id = btn.dataset.videoId
-                const time = parseFloat(btn.dataset.time || '0')
-                if (id) openVideo(id, time)
-            })
-        },
-    )
-
-    root.querySelectorAll<HTMLButtonElement>('button.delete-btn').forEach(
-        (btn) => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation()
-                const id = btn.dataset.videoId
-                if (id) {
-                    await deleteVideoState(id)
-                    await refreshData()
-                }
-            })
-        },
-    )
-
-    root.querySelectorAll<HTMLButtonElement>('button.ignore-btn').forEach(
-        (btn) => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation()
-                const channel = btn.dataset.channel
-                if (channel) {
-                    await addIgnoredChannel(channel)
-                    await refreshData()
-                }
-            })
-        },
-    )
-
+function renderIgnoredChannels(): void {
+    const ignoredRoot = document.getElementById('ignored-list')
     if (ignoredRoot) {
         if (ignoredChannels.length === 0) {
             ignoredRoot.innerHTML = `<div class="ignored-empty">None</div>`
@@ -299,19 +228,6 @@ function render(): void {
           `,
                 )
                 .join('')
-
-            ignoredRoot
-                .querySelectorAll<HTMLButtonElement>('button.ignored-remove')
-                .forEach((btn) => {
-                    btn.addEventListener('click', async (e) => {
-                        e.stopPropagation()
-                        const channel = btn.dataset.channel
-                        if (channel) {
-                            await removeIgnoredChannel(channel)
-                            await refreshData()
-                        }
-                    })
-                })
         }
     }
 }
@@ -326,54 +242,104 @@ function escapeHtml(value: string): string {
 }
 
 async function refreshData(): Promise<void> {
-    const [nextVideos, nextIgnoredChannels, nextEnabled] = await Promise.all([
-        getAllVideoStates(),
-        getIgnoredChannels(),
-        getEnabled(),
-    ])
-    allVideos = nextVideos
-    videoSearchIndex = buildVideoSearchIndex(allVideos)
-    ignoredChannels = nextIgnoredChannels
-    enabled = nextEnabled
+    const data = await getPopupData()
+    videoSearchIndex = buildVideoSearchIndex(data.videos)
+    ignoredChannels = data.ignoredChannels
+    enabled = data.enabled
+    const ignoredSet = new Set(ignoredChannels)
+    videosByTab = { unfinished: [], unwatched: [], finished: [] }
+    for (const video of data.videos
+        .slice()
+        .sort((a, b) => b.updatedAt - a.updatedAt)) {
+        if (
+            !ignoredSet.has(
+                normalizeChannelName(video.channel || DEFAULT_CHANNEL_NAME),
+            )
+        ) {
+            videosByTab[categorizeVideo(video)].push(video)
+        }
+    }
+    renderIgnoredChannels()
     render()
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    // Setup tab listeners
-    document.querySelectorAll('.tab-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-            currentTab = (btn as HTMLElement).dataset.tab as Tab
-            settingsOpen = false
-            render()
-        })
-    })
-
-    const settingsToggle = document.getElementById('settings-toggle')
-    settingsToggle?.addEventListener('click', () => {
-        settingsOpen = !settingsOpen
-        render()
-    })
-
-    const toggle = document.getElementById(
-        'toggle-enabled',
-    ) as HTMLInputElement | null
-    if (toggle) {
-        toggle.addEventListener('change', async () => {
-            enabled = toggle.checked
-            await setEnabled(enabled)
-            render()
-        })
+async function handleVideoClick(event: Event): Promise<void> {
+    if (!(event.target instanceof Element)) return
+    const card = event.target.closest<HTMLElement>('.card')
+    const id = card?.dataset.videoId
+    if (!id) return
+    const button = event.target.closest<HTMLButtonElement>('.action-btn')
+    if (button?.disabled) return
+    if (button?.classList.contains('delete-btn')) {
+        await deleteVideoState(id)
+        await refreshData()
+    } else if (button?.classList.contains('ignore-btn')) {
+        const channel = button.dataset.channel
+        if (channel) {
+            await addIgnoredChannel(channel)
+            await refreshData()
+        }
+    } else {
+        openVideo(id, Number(button?.dataset.time ?? card?.dataset.time))
     }
+}
 
-    const searchInput = document.getElementById(
-        'video-search',
-    ) as HTMLInputElement | null
-    if (searchInput) {
-        searchInput.addEventListener('input', () => {
-            searchQuery = searchInput.value
+async function handleIgnoredClick(event: Event): Promise<void> {
+    if (!(event.target instanceof Element)) return
+    const channel =
+        event.target.closest<HTMLButtonElement>('.ignored-remove')?.dataset
+            .channel
+    if (channel) {
+        await removeIgnoredChannel(channel)
+        await refreshData()
+    }
+}
+
+document.addEventListener(
+    'DOMContentLoaded',
+    async () => {
+        document
+            .getElementById('list')
+            ?.addEventListener('click', handleVideoClick)
+        document
+            .getElementById('ignored-list')
+            ?.addEventListener('click', handleIgnoredClick)
+        document.querySelectorAll('.tab-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                currentTab = (btn as HTMLElement).dataset.tab as Tab
+                settingsOpen = false
+                render()
+            })
+        })
+
+        const settingsToggle = document.getElementById('settings-toggle')
+        settingsToggle?.addEventListener('click', () => {
+            settingsOpen = !settingsOpen
             render()
         })
-    }
 
-    await refreshData()
-})
+        const toggle = document.getElementById(
+            'toggle-enabled',
+        ) as HTMLInputElement | null
+        if (toggle) {
+            toggle.addEventListener('change', async () => {
+                enabled = toggle.checked
+                await setEnabled(enabled)
+                render()
+            })
+        }
+
+        const searchInput = document.getElementById(
+            'video-search',
+        ) as HTMLInputElement | null
+        if (searchInput) {
+            searchInput.addEventListener('input', () => {
+                searchQuery = searchInput.value
+                render()
+            })
+        }
+
+        await refreshData()
+    },
+    { once: true },
+)
