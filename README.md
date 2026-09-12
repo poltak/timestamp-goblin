@@ -7,8 +7,8 @@ Chrome extension (Manifest V3) that persistently saves and restores YouTube watc
 ## Setup
 
 ```bash
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 ## Load unpacked
@@ -21,10 +21,10 @@ npm run build
 
 ```bash
 # Minified build
-npm run build:prod
+pnpm run build:prod
 
 # Zip ready for Chrome Web Store upload
-npm run package
+pnpm run package
 ```
 
 See [Chrome Web Store publishing](docs/chrome-web-store-publishing.md) for the

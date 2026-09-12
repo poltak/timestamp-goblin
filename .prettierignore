@@ -2,5 +2,5 @@ release/
 node_modules/
 .git/
 package.json
-package-lock.json
+pnpm-lock.yaml
 worker-configuration.d.ts

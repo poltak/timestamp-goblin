@@ -7,7 +7,7 @@ on:
         paths:
             - src/manifest.json
             - package.json
-            - package-lock.json
+            - pnpm-lock.yaml
 
 concurrency:
     group: chrome-web-store-publish
@@ -27,11 +27,14 @@ jobs:
               with:
                   fetch-depth: 0
 
+            - name: Set up pnpm
+              uses: pnpm/action-setup@v4
+
             - name: Set up Node.js
               uses: actions/setup-node@v7
               with:
                   node-version: 22
-                  cache: npm
+                  cache: pnpm
 
             - name: Check release version
               id: version
@@ -63,23 +66,23 @@ jobs:
 
             - name: Install dependencies
               if: steps.version.outputs.release == 'true'
-              run: npm ci
+              run: pnpm install --frozen-lockfile
 
             - name: Run tests
               if: steps.version.outputs.release == 'true'
-              run: npm run test:run
+              run: pnpm run test:run
 
             - name: Type-check source
               if: steps.version.outputs.release == 'true'
-              run: npm run check
+              run: pnpm run check
 
             - name: Type-check tests
               if: steps.version.outputs.release == 'true'
-              run: npm exec -- tsc -p tsconfig.test.json --noEmit
+              run: pnpm exec tsc -p tsconfig.test.json --noEmit
 
             - name: Build release package
               if: steps.version.outputs.release == 'true'
-              run: npm run package
+              run: pnpm run package
 
             - name: Authenticate to Google Cloud
               if: steps.version.outputs.release == 'true'

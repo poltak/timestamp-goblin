@@ -1,17 +1,18 @@
 {
+    "packageManager": "pnpm@11.25.0",
     "name": "timestamp-goblin",
     "version": "0.1.6",
     "private": true,
     "description": "Chrome extension to persist YouTube watch progress.",
     "type": "module",
     "scripts": {
-        "dev": "npm run build:watch",
+        "dev": "pnpm run build:watch",
         "build": "node scripts/build.mjs",
         "build:watch": "node scripts/build.mjs --watch",
         "build:prod": "NODE_ENV=production node scripts/build.mjs",
         "check": "tsc --noEmit",
         "check:watch": "tsc --noEmit --watch",
-        "package": "npm run build:prod && node scripts/package.mjs",
+        "package": "pnpm run build:prod && node scripts/package.mjs",
         "format": "prettier --write \"**/*.{ts,json,md}\"",
         "test": "vitest",
         "test:run": "vitest run"
