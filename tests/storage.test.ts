@@ -90,6 +90,49 @@ describe('storage', () => {
         expect(all[0].videoId).toBe('ok')
     })
 
+    it.each([
+        null,
+        [],
+        { t: -1, updatedAt: 1 },
+        { t: NaN, updatedAt: 1 },
+        { t: Infinity, updatedAt: 1 },
+        { t: 10 },
+        { t: 10, updatedAt: -1 },
+        { t: 10, updatedAt: Infinity },
+    ])('rejects invalid state %j on both read paths', async (value) => {
+        await chrome.storage.local.set({ 'ytp:bad': value })
+        expect(await getVideoState('bad')).toBeNull()
+        expect(await getAllVideoStates()).toEqual([])
+    })
+
+    it('normalizes legacy fields without changing stored data', async () => {
+        const legacy = { t: 20, updatedAt: 1, ft: -5, title: 42, channel: {} }
+        await chrome.storage.local.set({ 'ytp:legacy': legacy, 'ytp:': legacy })
+        const expected = {
+            t: 20,
+            ft: 20,
+            updatedAt: 1,
+            duration: Infinity,
+            title: 'Untitled video',
+            channel: 'Unknown channel',
+        }
+        expect(await getVideoState('legacy')).toEqual(expected)
+        expect(await getAllVideoStates()).toEqual([
+            { ...expected, videoId: 'legacy' },
+        ])
+        expect(
+            (await chrome.storage.local.get('ytp:legacy'))['ytp:legacy'],
+        ).toEqual(legacy)
+    })
+
+    it('normalizes ignored channels from storage', async () => {
+        const { getIgnoredChannels } = await import('../src/storage')
+        await chrome.storage.local.set({
+            'ignored:channels': [' My Channel ', 'my channel', '', 42],
+        })
+        expect(await getIgnoredChannels()).toEqual(['my channel'])
+    })
+
     it('manages ignored channel list', async () => {
         const { addIgnoredChannel, getIgnoredChannels, removeIgnoredChannel } =
             await import('../src/storage')
