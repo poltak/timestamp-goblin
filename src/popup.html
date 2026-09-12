@@ -3,89 +3,209 @@
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="color-scheme" content="light dark" />
         <title>Timestamp Goblin</title>
         <link rel="icon" href="icon-128.png" />
         <link rel="stylesheet" href="popup.css" />
     </head>
     <body>
-        <header>
+        <header class="app-header">
             <div class="brand">
-                <span class="logo" aria-hidden="true">
-                    <img src="icon-128.png" alt="" />
-                </span>
+                <img
+                    class="brand-mark"
+                    src="icon-128.png"
+                    alt=""
+                    width="42"
+                    height="42"
+                />
                 <div>
-                    <div class="title">Timestamp Goblin</div>
+                    <p class="brand-name">Timestamp Goblin</p>
+                    <p class="brand-caption">Your place, saved.</p>
                 </div>
             </div>
-            <div class="banner-actions">
-                <label class="toggle toggle-compact">
-                    <input id="toggle-enabled" type="checkbox" checked />
-                    <span class="toggle-ui" aria-hidden="true"></span>
-                    <span class="toggle-text">Auto-saving</span>
-                </label>
-                <button
-                    id="settings-toggle"
-                    class="settings-toggle"
-                    type="button"
-                    title="Settings"
-                    aria-label="Settings"
-                    aria-controls="settings-view"
-                    aria-pressed="false"
-                >
-                    <svg
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                        focusable="false"
-                    >
-                        <circle cx="12" cy="12" r="3"></circle>
-                        <path
-                            d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.08a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.08a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.08a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.12.6.6 1.06 1.2 1.15h.08a2 2 0 1 1 0 4h-.08c-.6.09-1.08.55-1.2 1.15Z"
-                        ></path>
-                    </svg>
-                </button>
-            </div>
-            <nav class="tabs">
-                <button class="tab-btn active" data-tab="unfinished">
-                    Unfinished
-                </button>
-                <button class="tab-btn" data-tab="unwatched">Unwatched</button>
-                <button class="tab-btn" data-tab="finished">Finished</button>
-            </nav>
+            <button
+                id="settings-toggle"
+                class="icon-button settings-toggle"
+                type="button"
+                title="Settings"
+                aria-label="Settings"
+                aria-controls="settings-view"
+                aria-pressed="false"
+            >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 7h9m4 0h3M4 17h3m4 0h9" />
+                    <circle cx="15" cy="7" r="2" />
+                    <circle cx="9" cy="17" r="2" />
+                </svg>
+            </button>
         </header>
+
         <main>
             <p id="error" class="error hidden" role="alert"></p>
-            <section id="video-view" class="video-view">
-                <section class="search">
-                    <label class="search-label" for="video-search"
-                        >Search videos</label
-                    >
-                    <input
-                        id="video-search"
-                        class="search-input"
-                        type="search"
-                        placeholder="Search by title or channel"
-                        autocomplete="off"
-                        spellcheck="false"
-                        aria-controls="list"
-                    />
-                </section>
-                <div id="empty" class="empty hidden">
-                    No unfinished videos yet.
+            <section
+                id="video-view"
+                class="video-view"
+                aria-label="Saved videos"
+            >
+                <div class="library-controls">
+                    <div class="search">
+                        <label class="sr-only" for="video-search"
+                            >Search videos</label
+                        >
+                        <svg
+                            class="search-icon"
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
+                        >
+                            <circle cx="10.5" cy="10.5" r="6.5" />
+                            <path d="m16 16 4 4" />
+                        </svg>
+                        <input
+                            id="video-search"
+                            class="search-input"
+                            type="search"
+                            placeholder="Search videos or channels"
+                            autocomplete="off"
+                            spellcheck="false"
+                            aria-controls="list"
+                        />
+                        <button
+                            id="search-clear"
+                            class="icon-button search-clear hidden"
+                            type="button"
+                            aria-label="Clear search"
+                            title="Clear search"
+                        >
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="m7 7 10 10M17 7 7 17" />
+                            </svg>
+                        </button>
+                    </div>
+                    <nav class="tabs" aria-label="Video status">
+                        <button
+                            class="tab-btn active"
+                            type="button"
+                            data-tab="unfinished"
+                            aria-pressed="true"
+                        >
+                            In progress
+                        </button>
+                        <button
+                            class="tab-btn"
+                            type="button"
+                            data-tab="unwatched"
+                            aria-pressed="false"
+                        >
+                            Not started
+                        </button>
+                        <button
+                            class="tab-btn"
+                            type="button"
+                            data-tab="finished"
+                            aria-pressed="false"
+                        >
+                            Finished
+                        </button>
+                    </nav>
+                    <div class="list-heading">
+                        <h1 id="list-heading">Continue watching</h1>
+                        <span
+                            id="result-summary"
+                            role="status"
+                            aria-live="polite"
+                        ></span>
+                    </div>
                 </div>
-                <div id="list" class="list"></div>
+                <div class="list-scroll">
+                    <p id="loading" class="loading" role="status">
+                        Loading saved videos…
+                    </p>
+                    <div id="empty" class="empty hidden">
+                        <div class="empty-mark" aria-hidden="true">
+                            <img
+                                src="icon-128.png"
+                                alt=""
+                                width="64"
+                                height="64"
+                            />
+                        </div>
+                        <h2 id="empty-title">Your next video awaits</h2>
+                        <p id="empty-description"></p>
+                    </div>
+                    <ul
+                        id="list"
+                        class="list"
+                        role="list"
+                        aria-labelledby="list-heading"
+                        aria-busy="true"
+                    ></ul>
+                </div>
             </section>
+
             <section
                 id="settings-view"
                 class="settings-view hidden"
                 aria-labelledby="settings-heading"
             >
-                <h1 id="settings-heading" class="settings-heading">Settings</h1>
-                <section class="ignored">
-                    <div class="ignored-title">Ignored channels</div>
+                <button
+                    id="settings-back"
+                    class="text-button back-button"
+                    type="button"
+                >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m10 5-7 7 7 7M3 12h18" />
+                    </svg>
+                    Back to videos
+                </button>
+                <h1 id="settings-heading">Settings</h1>
+                <p class="section-description">
+                    A little control over what you keep.
+                </p>
+                <section class="ignored" aria-labelledby="ignored-heading">
+                    <div class="settings-section-heading">
+                        <h2 id="ignored-heading">Ignored channels</h2>
+                        <span id="ignored-count" class="section-count">0</span>
+                    </div>
+                    <p class="section-description">
+                        Videos from these channels stay out of your list.
+                        Restore a channel to see its saved videos again.
+                    </p>
                     <div id="ignored-list" class="ignored-list"></div>
                 </section>
+                <div class="privacy-note">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <rect x="5" y="10" width="14" height="11" rx="3" />
+                        <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3" />
+                    </svg>
+                    <div>
+                        <h2>Saved on this device</h2>
+                        <p>
+                            Your watch progress is stored in this browser. No
+                            account needed.
+                        </p>
+                    </div>
+                </div>
             </section>
         </main>
+
+        <footer class="app-footer">
+            <label class="toggle" for="toggle-enabled">
+                <input
+                    id="toggle-enabled"
+                    type="checkbox"
+                    checked
+                    aria-label="Auto-save video progress"
+                />
+                <span class="toggle-ui" aria-hidden="true"></span>
+                <span class="toggle-text"
+                    >Auto-save <span id="saving-state">on</span></span
+                >
+            </label>
+            <span class="footer-note"
+                ><span class="status-dot" aria-hidden="true"></span
+                ><span id="saving-description">Ready when you are</span></span
+            >
+        </footer>
         <script src="popup.js"></script>
     </body>
 </html>

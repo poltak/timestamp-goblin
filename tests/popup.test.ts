@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { deferred } from './helpers'
+
+const popupHtml = readFileSync('src/popup.html', 'utf8')
 
 const seedVideos = [
     {
@@ -69,54 +72,11 @@ vi.mock('../src/youtube', () => ({
 
 describe('popup', () => {
     const setBaseDom = () => {
-        document.body.innerHTML = `
-      <header>
-        <div class="banner-actions">
-          <label class="toggle toggle-compact">
-            <input id="toggle-enabled" type="checkbox" checked />
-            <span class="toggle-ui" aria-hidden="true"></span>
-            <span class="toggle-text">Auto-saving</span>
-          </label>
-          <button
-            id="settings-toggle"
-            class="settings-toggle"
-            type="button"
-            title="Settings"
-            aria-label="Settings"
-            aria-controls="settings-view"
-            aria-pressed="false"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.08a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.08a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.08a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.12.6.6 1.06 1.2 1.15h.08a2 2 0 1 1 0 4h-.08c-.6.09-1.08.55-1.2 1.15Z"></path>
-            </svg>
-          </button>
-        </div>
-        <nav class="tabs">
-          <button class="tab-btn active" data-tab="unfinished">Unfinished</button>
-          <button class="tab-btn" data-tab="unwatched">Unwatched</button>
-          <button class="tab-btn" data-tab="finished">Finished</button>
-        </nav>
-      </header>
-      <main>
-        <p id="error" class="hidden" role="alert"></p>
-        <section id="video-view" class="video-view">
-          <section class="search">
-            <label class="search-label" for="video-search">Search videos</label>
-            <input id="video-search" class="search-input" type="search" />
-          </section>
-          <div id="empty" class="empty hidden"></div>
-          <div id="list" class="list"></div>
-        </section>
-        <section id="settings-view" class="settings-view hidden" aria-labelledby="settings-heading">
-          <h1 id="settings-heading" class="settings-heading">Settings</h1>
-          <section class="ignored">
-            <div class="ignored-title">Ignored channels</div>
-            <div id="ignored-list" class="ignored-list"></div>
-          </section>
-        </section>
-      </main>
-    `
+        document.body.innerHTML = new DOMParser().parseFromString(
+            popupHtml,
+            'text/html',
+        ).body.innerHTML
+        document.body.className = ''
     }
 
     beforeEach(async () => {
@@ -134,6 +94,122 @@ describe('popup', () => {
         const cards = document.querySelectorAll('.card')
         expect(cards).toHaveLength(1)
         expect(cards[0].textContent).toContain('Unfinished')
+        expect(document.getElementById('result-summary')?.textContent).toBe(
+            '1 video',
+        )
+        expect(document.getElementById('list')?.getAttribute('aria-busy')).toBe(
+            'false',
+        )
+        expect(
+            document.getElementById('loading')?.classList.contains('hidden'),
+        ).toBe(true)
+    })
+
+    it('clears search with its button or Escape and keeps keyboard focus', () => {
+        const search = document.getElementById(
+            'video-search',
+        ) as HTMLInputElement
+        const clear = document.getElementById(
+            'search-clear',
+        ) as HTMLButtonElement
+        search.value = 'missing'
+        search.dispatchEvent(new Event('input'))
+        expect(document.querySelectorAll('.card')).toHaveLength(0)
+        expect(clear.classList.contains('hidden')).toBe(false)
+        clear.click()
+        expect(search.value).toBe('')
+        expect(document.activeElement).toBe(search)
+        expect(document.querySelectorAll('.card')).toHaveLength(1)
+        expect(clear.classList.contains('hidden')).toBe(true)
+        search.value = 'another'
+        search.dispatchEvent(new Event('input'))
+        const escape = new KeyboardEvent('keydown', {
+            key: 'Escape',
+            bubbles: true,
+            cancelable: true,
+        })
+        search.dispatchEvent(escape)
+        expect(escape.defaultPrevented).toBe(true)
+        expect(search.value).toBe('')
+        expect(document.activeElement).toBe(search)
+    })
+
+    it('returns from settings with Escape or Back and restores focus', () => {
+        const settings = document.getElementById(
+            'settings-toggle',
+        ) as HTMLButtonElement
+        const back = document.getElementById(
+            'settings-back',
+        ) as HTMLButtonElement
+        settings.click()
+        expect(document.activeElement).toBe(back)
+        back.dispatchEvent(
+            new KeyboardEvent('keydown', {
+                key: 'Escape',
+                bubbles: true,
+                cancelable: true,
+            }),
+        )
+        expect(document.activeElement).toBe(settings)
+        expect(settings.getAttribute('aria-pressed')).toBe('false')
+        settings.click()
+        back.click()
+        expect(document.activeElement).toBe(settings)
+        expect(
+            document.getElementById('video-view')?.classList.contains('hidden'),
+        ).toBe(false)
+    })
+
+    it('displays full hour timestamps and both progress positions', async () => {
+        videos = [{ ...seedVideos[0], t: 3725, ft: 5410, duration: 7600 }]
+        setBaseDom()
+        vi.resetModules()
+        await import('../src/popup')
+        document.dispatchEvent(new Event('DOMContentLoaded'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(document.querySelector('.last-btn')?.textContent).toContain(
+            '1:02:05',
+        )
+        expect(document.querySelector('.furthest-btn')?.textContent).toContain(
+            '1:30:10',
+        )
+        expect(document.querySelector('.video-duration')?.textContent).toBe(
+            '2:06:40',
+        )
+        expect(
+            document.querySelector<HTMLElement>('.fill.last')?.style.width,
+        ).toBe('49%')
+        expect(
+            document.querySelector<HTMLElement>('.fill.furthest')?.style.width,
+        ).toBe('71%')
+        expect(
+            document.querySelector('.bar')?.getAttribute('aria-label'),
+        ).toContain('Furthest watched: 1:30:10')
+    })
+
+    it('shows a useful first-use state when saving is paused', async () => {
+        videos = []
+        enabled = false
+        setBaseDom()
+        vi.resetModules()
+        await import('../src/popup')
+        document.dispatchEvent(new Event('DOMContentLoaded'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(
+            document.getElementById('empty')?.classList.contains('hidden'),
+        ).toBe(false)
+        expect(
+            document.getElementById('empty-description')?.textContent,
+        ).toContain('Turn on auto-save')
+        expect(document.getElementById('saving-state')?.textContent).toBe(
+            'paused',
+        )
+        expect(
+            document.getElementById('loading')?.classList.contains('hidden'),
+        ).toBe(true)
+        expect(document.getElementById('list')?.getAttribute('aria-busy')).toBe(
+            'false',
+        )
     })
 
     it('shows tab counts and empty states', async () => {
@@ -306,7 +382,12 @@ describe('popup', () => {
 
         expect(document.querySelectorAll('.card')).toHaveLength(0)
         const empty = document.getElementById('empty')
-        expect(empty?.textContent).toBe('No unfinished videos match "missing".')
+        expect(document.getElementById('empty-title')?.textContent).toBe(
+            'No matching videos',
+        )
+        expect(
+            document.getElementById('empty-description')?.textContent,
+        ).toContain('"missing"')
         expect(empty?.classList.contains('hidden')).toBe(false)
 
         search.value = ''
@@ -345,7 +426,7 @@ describe('popup', () => {
         await new Promise((resolve) => setTimeout(resolve, 0))
 
         const titles = Array.from(
-            document.querySelectorAll('.card .title'),
+            document.querySelectorAll('.card .video-title'),
         ).map((el) => el.textContent)
         expect(titles[0]).toBe('New')
         expect(titles[1]).toBe('Old')
@@ -513,20 +594,27 @@ describe('popup', () => {
         )
     })
 
-    it('opens videos on card or buttons', () => {
+    it('opens videos from the named resume and furthest buttons', () => {
         const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
-        const card = document.querySelector<HTMLDivElement>('.card')
-        card?.click()
-        expect(openSpy).toHaveBeenCalledTimes(1)
-
         const lastBtn =
             document.querySelector<HTMLButtonElement>('button.last-btn')
+        expect(lastBtn?.getAttribute('aria-label')).toBe(
+            'Resume Unfinished at 0:30',
+        )
         lastBtn?.click()
+        expect(openSpy).toHaveBeenLastCalledWith(
+            'https://www.youtube.com/watch?v=a1&t=30s',
+            '_blank',
+        )
         const furthestBtn = document.querySelector<HTMLButtonElement>(
             'button.furthest-btn',
         )
         furthestBtn?.click()
-        expect(openSpy).toHaveBeenCalledTimes(3)
+        expect(openSpy).toHaveBeenLastCalledWith(
+            'https://www.youtube.com/watch?v=a1&t=40s',
+            '_blank',
+        )
+        expect(openSpy).toHaveBeenCalledTimes(2)
         openSpy.mockRestore()
     })
 
@@ -545,8 +633,38 @@ describe('popup', () => {
         expect(cards).toHaveLength(0)
         const empty = document.getElementById('empty')
         expect(empty?.classList.contains('hidden')).toBe(false)
-        expect(empty?.textContent).toBe('No unfinished videos match "UNFIN".')
+        expect(document.getElementById('empty-title')?.textContent).toBe(
+            'No matching videos',
+        )
+        expect(
+            document.getElementById('empty-description')?.textContent,
+        ).toContain('"UNFIN"')
         expect(search.value).toBe('UNFIN')
+    })
+
+    it('keeps keyboard focus in the list after removing a video', async () => {
+        const button = document.querySelector<HTMLButtonElement>('.delete-btn')!
+        button.focus()
+        button.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(document.activeElement).toBe(
+            document.getElementById('video-search'),
+        )
+    })
+
+    it('keeps keyboard focus in settings after restoring the last channel', async () => {
+        document.querySelector<HTMLButtonElement>('.ignore-btn')!.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        document.getElementById('settings-toggle')!.click()
+        const button =
+            document.querySelector<HTMLButtonElement>('.ignored-remove')!
+        button.focus()
+        button.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(document.activeElement).toBe(
+            document.getElementById('settings-back'),
+        )
+        expect(document.getElementById('ignored-count')?.textContent).toBe('0')
     })
 
     it('preserves quotes in channel names when ignoring and restoring them', async () => {

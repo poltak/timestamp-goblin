@@ -35,28 +35,47 @@ let renderedItems: VideoItem[] = []
 let refreshVersion = 0
 let mutationQueue = Promise.resolve()
 
+const tabHeadings: Record<Tab, string> = {
+    unfinished: 'Continue watching',
+    unwatched: 'Waiting for you',
+    finished: 'All wrapped up',
+}
+
+const icons = {
+    play: '<path d="m8 5 11 7-11 7Z"/>',
+    forward: '<path d="m4 5 9 7-9 7Zm9 0 9 7-9 7Z"/>',
+    ignore: '<circle cx="12" cy="12" r="8"/><path d="m6.3 6.3 11.4 11.4"/>',
+    delete: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7m4-7v7"/>',
+}
+
+function icon(name: keyof typeof icons): string {
+    return `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name]}</svg>`
+}
+
 function categorizeVideo(state: StoredVideoState): Tab {
-    if (!Number.isFinite(state.duration)) {
+    if (!Number.isFinite(state.duration) || state.t < MIN_RESUME_SECONDS) {
         return 'unwatched'
     }
-
-    if (state.t < MIN_RESUME_SECONDS) {
-        return 'unwatched'
-    }
-
     if (state.t >= state.duration - DEFAULT_UNFINISHED_BUFFER_SECONDS) {
         return 'finished'
     }
-
     return 'unfinished'
 }
 
-function formatPercent(time: number, duration: number): string {
-    if (!Number.isFinite(duration) || duration <= 0) {
-        return '--%'
-    }
-    const pct = Math.min(100, Math.max(0, Math.round((time / duration) * 100)))
-    return `${pct}%`
+function getPercent(time: number, duration: number): number | null {
+    if (!Number.isFinite(duration) || duration <= 0) return null
+    return Math.min(100, Math.max(0, Math.round((time / duration) * 100)))
+}
+
+function formatTime(time: number): string {
+    if (!Number.isFinite(time)) return '--:--'
+    const seconds = Math.max(0, Math.floor(time))
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const remainder = String(seconds % 60).padStart(2, '0')
+    return hours
+        ? `${hours}:${String(minutes).padStart(2, '0')}:${remainder}`
+        : `${minutes}:${remainder}`
 }
 
 function openVideo(videoId: string, time?: number): void {
@@ -65,6 +84,48 @@ function openVideo(videoId: string, time?: number): void {
         url += `&t=${Math.floor(time)}s`
     }
     window.open(url, '_blank')
+}
+
+function renderVideo(item: VideoItem): string {
+    const title = item.title || DEFAULT_VIDEO_TITLE
+    const channel = item.channel || DEFAULT_CHANNEL_NAME
+    const lastTime = formatTime(item.t)
+    const furthestTime = formatTime(item.ft)
+    const lastPercent = getPercent(item.t, item.duration)
+    const furthestPercent = getPercent(item.ft, item.duration)
+    const progressLabel = `Last watched: ${lastTime}. Furthest watched: ${furthestTime}. Duration: ${formatTime(item.duration)}.`
+    const videoId = escapeHtml(item.videoId)
+    const canIgnore = channel !== DEFAULT_CHANNEL_NAME
+
+    return `
+        <li class="card" data-video-id="${videoId}">
+            <button class="card-open last-btn" type="button" data-time="${item.t}" aria-label="${escapeHtml(`${item.t > 0 ? 'Resume' : 'Play'} ${title} at ${lastTime}`)}">
+                <span class="thumbnail">
+                    <img src="${escapeHtml(getThumbnailUrl(item.videoId))}" alt="" loading="lazy" width="112" height="63">
+                    <span class="thumbnail-play">${icon('play')}</span>
+                    <span class="video-duration">${formatTime(item.duration)}</span>
+                </span>
+                <span class="info">
+                    <span class="video-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
+                    <span class="channel" title="${escapeHtml(channel)}">${escapeHtml(channel)}</span>
+                    <span class="resume-label">${icon('play')}${item.t > 0 ? 'Resume' : 'Play'} <span class="resume-time">${lastTime}</span></span>
+                </span>
+            </button>
+            <div class="bar" role="img" aria-label="${escapeHtml(progressLabel)}" title="Last: ${lastPercent ?? '--'}%, furthest: ${furthestPercent ?? '--'}%">
+                <span class="fill furthest" style="width: ${furthestPercent ?? 0}%"></span>
+                <span class="fill last" style="width: ${lastPercent ?? 0}%"></span>
+            </div>
+            <div class="card-footer">
+                <button class="action-btn furthest-btn" type="button" data-time="${item.ft}" aria-label="${escapeHtml(`Watch ${title} from furthest point at ${furthestTime}`)}" title="Watch from furthest point">
+                    ${icon('forward')}Furthest <span class="resume-time">${furthestTime}</span>
+                </button>
+                <div class="actions">
+                    <button class="action-btn ignore-btn" type="button" title="Ignore channel" aria-label="${escapeHtml(`Ignore channel ${channel}`)}" data-channel="${escapeHtml(channel)}" ${canIgnore ? '' : 'disabled'}>${icon('ignore')}</button>
+                    <button class="action-btn delete-btn" type="button" title="Remove from list" aria-label="${escapeHtml(`Remove ${title} from saved videos`)}">${icon('delete')}</button>
+                </div>
+            </div>
+        </li>
+    `
 }
 
 function render(): void {
@@ -79,17 +140,24 @@ function render(): void {
     const enabledToggle = document.getElementById(
         'toggle-enabled',
     ) as HTMLInputElement | null
-    if (!root || !empty) {
-        return
-    }
+    if (!root || !empty) return
 
-    if (enabledToggle) {
-        enabledToggle.checked = enabled
-    }
-    if (searchInput && searchInput.value !== searchQuery) {
+    if (enabledToggle) enabledToggle.checked = enabled
+    if (searchInput && searchInput.value !== searchQuery)
         searchInput.value = searchQuery
-    }
     document.body.classList.toggle('is-disabled', !enabled)
+    document.getElementById('loading')?.classList.add('hidden')
+    document
+        .getElementById('search-clear')
+        ?.classList.toggle('hidden', !searchQuery)
+    root.setAttribute('aria-busy', 'false')
+    const savingState = document.getElementById('saving-state')
+    const savingDescription = document.getElementById('saving-description')
+    if (savingState) savingState.textContent = enabled ? 'on' : 'paused'
+    if (savingDescription)
+        savingDescription.textContent = enabled
+            ? 'Ready when you are'
+            : 'Progress saving paused'
 
     videoView?.classList.toggle('hidden', settingsOpen)
     settingsView?.classList.toggle('hidden', !settingsOpen)
@@ -111,14 +179,11 @@ function render(): void {
         if (items.length === MAX_POPUP_ITEMS) break
     }
 
-    document.querySelectorAll('.tab-btn').forEach((btn) => {
-        const tab = (btn as HTMLElement).dataset.tab as Tab
-        if (!settingsOpen && tab === currentTab) {
-            btn.classList.add('active')
-        } else {
-            btn.classList.remove('active')
-        }
-
+    document.querySelectorAll<HTMLButtonElement>('.tab-btn').forEach((btn) => {
+        const tab = btn.dataset.tab as Tab
+        const active = !settingsOpen && tab === currentTab
+        btn.classList.toggle('active', active)
+        btn.setAttribute('aria-pressed', String(active))
         let badge = btn.querySelector('.tab-count')
         const count = videosByTab[tab].length
         if (count > 0) {
@@ -128,18 +193,55 @@ function render(): void {
                 btn.appendChild(badge)
             }
             badge.textContent = count.toString()
-        } else if (badge) {
-            badge.remove()
+        } else {
+            badge?.remove()
         }
     })
 
+    const heading = document.getElementById('list-heading')
+    const summary = document.getElementById('result-summary')
+    if (heading)
+        heading.textContent = normalizedSearchQuery
+            ? 'Search results'
+            : tabHeadings[currentTab]
+    if (summary) {
+        summary.textContent =
+            normalizedSearchQuery && items.length === MAX_POPUP_ITEMS
+                ? `${items.length} shown`
+                : !normalizedSearchQuery &&
+                    videosByTab[currentTab].length > items.length
+                  ? `${items.length} of ${videosByTab[currentTab].length} videos`
+                  : `${items.length} ${items.length === 1 ? 'video' : 'videos'}`
+    }
+
+    empty.classList.toggle('hidden', items.length > 0)
     if (items.length === 0) {
-        empty.classList.remove('hidden')
-        empty.textContent = normalizedSearchQuery
-            ? `No ${currentTab} videos match "${normalizedSearchQuery}".`
-            : `No ${currentTab} videos yet.`
-    } else {
-        empty.classList.add('hidden')
+        const emptyTitle = document.getElementById('empty-title')
+        const emptyDescription = document.getElementById('empty-description')
+        const messages: Record<Tab, [string, string]> = {
+            unfinished: [
+                'Your next video awaits',
+                enabled
+                    ? "Start watching on YouTube. We'll keep your place here."
+                    : 'Turn on auto-save to keep your place in the next video.',
+            ],
+            unwatched: [
+                'No videos waiting',
+                'Videos you have opened but barely started will appear here.',
+            ],
+            finished: [
+                'Nothing finished yet',
+                'Videos you reach the end of will appear here.',
+            ],
+        }
+        if (emptyTitle)
+            emptyTitle.textContent = normalizedSearchQuery
+                ? 'No matching videos'
+                : messages[currentTab][0]
+        if (emptyDescription)
+            emptyDescription.textContent = normalizedSearchQuery
+                ? `No ${currentTab} videos match "${normalizedSearchQuery}". Try another title or channel.`
+                : messages[currentTab][1]
     }
 
     if (
@@ -147,90 +249,55 @@ function render(): void {
         items.every((item, index) => item === renderedItems[index])
     )
         return
+    const focusedCard = document.activeElement?.closest<HTMLElement>('.card')
+    const focusedId =
+        focusedCard && root.contains(focusedCard)
+            ? focusedCard.dataset.videoId
+            : undefined
+    const focusedIndex = renderedItems.findIndex(
+        (item) => item.videoId === focusedId,
+    )
     renderedItems = items
-    root.innerHTML = items
-        .map((item) => {
-            const title = item.title || DEFAULT_VIDEO_TITLE
-            const channel = item.channel || DEFAULT_CHANNEL_NAME
-            const lastPercent = formatPercent(item.t, item.duration)
-            const furthestPercent = formatPercent(item.ft, item.duration)
-            const thumb = escapeHtml(getThumbnailUrl(item.videoId))
-            const videoId = escapeHtml(item.videoId)
-            const canIgnore = channel !== DEFAULT_CHANNEL_NAME
-            return `
-        <div class="card" data-video-id="${videoId}" data-time="${item.t}">
-          <div class="card-content">
-            <div class="thumbnail">
-              <img src="${thumb}" alt="" loading="lazy">
-            </div>
-            <div class="info">
-              <div class="title">${escapeHtml(title)}</div>
-              <div class="meta">
-                <span class="channel">${escapeHtml(channel)}</span>
-                <div class="percents">
-                  <span class="percent last" title="Last watched">L: ${lastPercent}</span>
-                  <span class="percent-sep">|</span>
-                  <span class="percent furthest" title="Furthest watched">F: ${furthestPercent}</span>
-                </div>
-              </div>
-              <div class="bar" title="Last: ${lastPercent}, Furthest: ${furthestPercent}">
-                <div class="fill furthest" style="width: ${furthestPercent}"></div>
-                <div class="fill last" style="width: ${lastPercent}"></div>
-              </div>
-            </div>
-          </div>
-          <div class="actions">
-            <button class="action-btn last-btn" title="Watch from last watched time" data-video-id="${videoId}" data-time="${item.t}">
-              <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="5 3 19 12 5 21 5 3"></polygon>
-              </svg>
-            </button>
-            <button class="action-btn furthest-btn" title="Watch from furthest watched time" data-video-id="${videoId}" data-time="${item.ft}">
-              <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="13 19 22 12 13 5 13 19"></polygon>
-                <polygon points="2 19 11 12 2 5 2 19"></polygon>
-              </svg>
-            </button>
-            <button class="action-btn ignore-btn" title="Ignore channel" data-channel="${escapeHtml(channel)}" ${
-                canIgnore ? '' : 'disabled'
-            }>
-              <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="4.9" y1="4.9" x2="19.1" y2="19.1"></line>
-              </svg>
-            </button>
-            <button class="action-btn delete-btn" title="Remove from list" data-video-id="${videoId}">
-              <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
-            </button>
-          </div>
-        </div>
-      `
-        })
-        .join('')
+    root.innerHTML = items.map(renderVideo).join('')
+    if (focusedId) {
+        const cards = Array.from(root.querySelectorAll<HTMLElement>('.card'))
+        const nextCard =
+            cards.find((card) => card.dataset.videoId === focusedId) ??
+            cards[Math.min(focusedIndex, cards.length - 1)]
+        const nextButton =
+            nextCard?.querySelector<HTMLButtonElement>('.last-btn')
+        ;(nextButton ?? searchInput)?.focus()
+    }
 }
 
 function renderIgnoredChannels(): void {
+    const count = document.getElementById('ignored-count')
+    if (count) count.textContent = String(ignoredChannels.length)
     const ignoredRoot = document.getElementById('ignored-list')
-    if (ignoredRoot) {
-        if (ignoredChannels.length === 0) {
-            ignoredRoot.innerHTML = `<div class="ignored-empty">None</div>`
-        } else {
-            ignoredRoot.innerHTML = ignoredChannels
-                .slice()
-                .sort()
-                .map(
-                    (channel) => `
-            <span class="ignored-pill" data-channel="${escapeHtml(channel)}">
-              <span class="ignored-name">${escapeHtml(channel)}</span>
-              <button class="ignored-remove" title="Stop ignoring" data-channel="${escapeHtml(channel)}">×</button>
-            </span>
-          `,
-                )
-                .join('')
-        }
+    if (!ignoredRoot) return
+    const focusedIndex = Array.from(
+        ignoredRoot.querySelectorAll('.ignored-remove'),
+    ).indexOf(document.activeElement as Element)
+    ignoredRoot.innerHTML =
+        ignoredChannels.length === 0
+            ? '<p class="ignored-empty">No ignored channels. Everyone is welcome.</p>'
+            : ignoredChannels
+                  .slice()
+                  .sort()
+                  .map(
+                      (channel) => `
+            <div class="ignored-pill">
+                <span class="ignored-name">${escapeHtml(channel)}</span>
+                <button class="ignored-remove" type="button" aria-label="${escapeHtml(`Restore channel ${channel}`)}" data-channel="${escapeHtml(channel)}">Restore</button>
+            </div>
+        `,
+                  )
+                  .join('')
+    if (focusedIndex >= 0) {
+        const buttons =
+            ignoredRoot.querySelectorAll<HTMLButtonElement>('.ignored-remove')
+        const nextButton = buttons[Math.min(focusedIndex, buttons.length - 1)]
+        ;(nextButton ?? document.getElementById('settings-back'))?.focus()
     }
 }
 
@@ -271,6 +338,8 @@ async function refreshData(): Promise<void> {
 }
 
 function showError(message: string): void {
+    document.getElementById('loading')?.classList.add('hidden')
+    document.getElementById('list')?.setAttribute('aria-busy', 'false')
     const error = document.getElementById('error')
     if (!error) return
     error.textContent = message
@@ -294,18 +363,15 @@ function handleVideoClick(event: Event): void {
     if (!(event.target instanceof Element)) return
     const card = event.target.closest<HTMLElement>('.card')
     const id = card?.dataset.videoId
-    if (!id) return
-    const button = event.target.closest<HTMLButtonElement>('.action-btn')
-    if (button?.disabled) return
-    if (button?.classList.contains('delete-btn')) {
+    const button = event.target.closest<HTMLButtonElement>('button')
+    if (!id || !button || button.disabled) return
+    if (button.classList.contains('delete-btn')) {
         runMutation(() => deleteVideoState(id))
-    } else if (button?.classList.contains('ignore-btn')) {
+    } else if (button.classList.contains('ignore-btn')) {
         const channel = button.dataset.channel
-        if (channel) {
-            runMutation(() => addIgnoredChannel(channel))
-        }
+        if (channel) runMutation(() => addIgnoredChannel(channel))
     } else {
-        openVideo(id, Number(button?.dataset.time ?? card?.dataset.time))
+        openVideo(id, Number(button.dataset.time))
     }
 }
 
@@ -314,9 +380,13 @@ function handleIgnoredClick(event: Event): void {
     const channel =
         event.target.closest<HTMLButtonElement>('.ignored-remove')?.dataset
             .channel
-    if (channel) {
-        runMutation(() => removeIgnoredChannel(channel))
-    }
+    if (channel) runMutation(() => removeIgnoredChannel(channel))
+}
+
+function setSettingsOpen(open: boolean): void {
+    settingsOpen = open
+    render()
+    document.getElementById(open ? 'settings-back' : 'settings-toggle')?.focus()
 }
 
 document.addEventListener(
@@ -328,39 +398,59 @@ document.addEventListener(
         document
             .getElementById('ignored-list')
             ?.addEventListener('click', handleIgnoredClick)
-        document.querySelectorAll('.tab-btn').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                currentTab = (btn as HTMLElement).dataset.tab as Tab
-                settingsOpen = false
-                render()
+        document
+            .querySelectorAll<HTMLButtonElement>('.tab-btn')
+            .forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    currentTab = btn.dataset.tab as Tab
+                    settingsOpen = false
+                    render()
+                })
             })
-        })
-
-        const settingsToggle = document.getElementById('settings-toggle')
-        settingsToggle?.addEventListener('click', () => {
-            settingsOpen = !settingsOpen
-            render()
-        })
+        document
+            .getElementById('settings-toggle')
+            ?.addEventListener('click', () => setSettingsOpen(!settingsOpen))
+        document
+            .getElementById('settings-back')
+            ?.addEventListener('click', () => setSettingsOpen(false))
+        document
+            .getElementById('settings-view')
+            ?.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    event.preventDefault()
+                    setSettingsOpen(false)
+                }
+            })
 
         const toggle = document.getElementById(
             'toggle-enabled',
         ) as HTMLInputElement | null
-        if (toggle) {
-            toggle.addEventListener('change', () => {
-                const nextEnabled = toggle.checked
-                runMutation(() => setEnabled(nextEnabled))
-            })
-        }
+        toggle?.addEventListener('change', () => {
+            const nextEnabled = toggle.checked
+            runMutation(() => setEnabled(nextEnabled))
+        })
 
         const searchInput = document.getElementById(
             'video-search',
         ) as HTMLInputElement | null
-        if (searchInput) {
-            searchInput.addEventListener('input', () => {
-                searchQuery = searchInput.value
-                render()
-            })
+        searchInput?.addEventListener('input', () => {
+            searchQuery = searchInput.value
+            render()
+        })
+        const clearSearch = () => {
+            searchQuery = ''
+            render()
+            searchInput?.focus()
         }
+        document
+            .getElementById('search-clear')
+            ?.addEventListener('click', clearSearch)
+        searchInput?.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && searchQuery) {
+                event.preventDefault()
+                clearSearch()
+            }
+        })
 
         try {
             await refreshData()
