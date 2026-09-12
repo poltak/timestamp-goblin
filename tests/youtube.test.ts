@@ -5,6 +5,7 @@ import {
     getThumbnailUrl,
     getVideoId,
     getVideoTitle,
+    hasExplicitStartTime,
     isLiveVideo,
     isWatchPage,
     waitForVideoElement,
@@ -28,6 +29,19 @@ describe('youtube helpers', () => {
         window.history.pushState({}, '', '/results')
         expect(isWatchPage()).toBe(false)
         expect(getVideoId()).toBeNull()
+    })
+
+    it.each(['?v=abc&t=0', '?v=abc&t=1h2m', '?v=abc&start=60', '?v=abc#t=30s'])(
+        'detects an explicit timestamp in %s',
+        (suffix) => {
+            history.replaceState({}, '', `/watch${suffix}`)
+            expect(hasExplicitStartTime()).toBe(true)
+        },
+    )
+
+    it('allows resume for links without a timestamp', () => {
+        history.replaceState({}, '', '/watch?v=abc')
+        expect(hasExplicitStartTime()).toBe(false)
     })
 
     it('detects live videos', () => {

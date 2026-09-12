@@ -21,6 +21,7 @@ const youtubeMocks = {
     ),
     getChannelName: vi.fn<() => string | null>(() => 'Channel'),
     getVideoId: vi.fn(() => 'vid1'),
+    hasExplicitStartTime: vi.fn(() => false),
     getVideoTitle: vi.fn<() => string | null>(() => 'Title'),
     isLiveVideo: vi.fn(() => false),
     isWatchPage: vi.fn(() => true),
@@ -55,6 +56,7 @@ describe('content script', () => {
         storageMocks.getEnabled.mockResolvedValue(true)
         youtubeMocks.isWatchPage.mockReturnValue(true)
         youtubeMocks.getVideoId.mockReturnValue('vid1')
+        youtubeMocks.hasExplicitStartTime.mockReturnValue(false)
         youtubeMocks.isLiveVideo.mockReturnValue(false)
         youtubeMocks.getVideoTitle.mockReturnValue('Title')
         youtubeMocks.getChannelName.mockReturnValue('Channel')
@@ -222,6 +224,26 @@ describe('content script', () => {
         video.currentTime = 200
         vi.advanceTimersByTime(500)
         expect(video.currentTime).toBe(200)
+    })
+
+    it('preserves a timestamp link before the player applies its seek', async () => {
+        const mod = await import('../src/content')
+        const video = document.createElement('video')
+        Object.defineProperty(video, 'duration', { value: 300 })
+        storageMocks.getVideoState.mockResolvedValue({
+            t: 120,
+            ft: 150,
+            updatedAt: 1,
+            duration: 300,
+            title: 'Title',
+            channel: 'Channel',
+        })
+        youtubeMocks.hasExplicitStartTime.mockReturnValue(true)
+        mod.__testing.setActive('vid1', video)
+        await mod.tryResume(video, 'vid1', mod.__testing.getState().initToken)
+        expect(video.currentTime).toBe(0)
+        expect(mod.__testing.getState().currentFurthestTime).toBe(150)
+        expect(mod.__testing.getState().resumeReapplyId).toBeNull()
     })
 
     it('allows only one save while storage is pending', async () => {

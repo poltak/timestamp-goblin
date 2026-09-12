@@ -14,6 +14,15 @@ export function getVideoId(): string | null {
     return params.get('v')
 }
 
+export function hasExplicitStartTime(): boolean {
+    const params = new URLSearchParams(location.search)
+    return (
+        params.has('t') ||
+        params.has('start') ||
+        new URLSearchParams(location.hash.slice(1)).has('t')
+    )
+}
+
 export function isLiveVideo(video: HTMLVideoElement): boolean {
     return video.duration === Infinity
 }

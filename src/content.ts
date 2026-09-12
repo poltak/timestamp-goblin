@@ -10,6 +10,7 @@ import {
     getChannelName,
     getVideoId,
     getVideoTitle,
+    hasExplicitStartTime,
     isLiveVideo,
     isWatchPage,
     waitForVideoElement,
@@ -222,6 +223,7 @@ export async function tryResume(
         ) ||
         !state ||
         state.t < MIN_RESUME_SECONDS ||
+        hasExplicitStartTime() ||
         isLiveVideo(video) ||
         video.currentTime > NEAR_START_WINDOW_SECONDS
     ) {
@@ -237,7 +239,8 @@ export async function tryResume(
         if (
             token !== initToken ||
             videoId !== activeVideoId ||
-            videoId !== getVideoId()
+            videoId !== getVideoId() ||
+            hasExplicitStartTime()
         ) {
             return
         }
