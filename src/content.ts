@@ -248,15 +248,16 @@ export async function initForVideo(videoId: string): Promise<void> {
     const token = ++initToken
     log('init', videoId)
 
-    waitHandle = waitForVideoElement(15000)
+    const handle = waitForVideoElement(15000)
+    waitHandle = handle
     let video: HTMLVideoElement
     try {
-        video = await waitHandle.promise
+        video = await handle.promise
     } catch (err) {
         log('video wait failed', err)
         return
     } finally {
-        if (waitHandle) {
+        if (waitHandle === handle) {
             waitHandle = null
         }
     }

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MIN_RESUME_SECONDS, NEAR_START_WINDOW_SECONDS } from '../src/constants'
+import { deferred } from './helpers'
 
 const storageMocks = {
     getVideoState: vi.fn(async () => null),
@@ -294,5 +295,30 @@ describe('content script', () => {
         mod.startSavingLoop()
         await vi.advanceTimersByTimeAsync(8000)
         expect(storageMocks.setVideoState).toHaveBeenCalled()
+    })
+
+    it('keeps the new wait handle when an older initialization finishes', async () => {
+        const mod = await import('../src/content')
+        const first = deferred<HTMLVideoElement>()
+        const second = deferred<HTMLVideoElement>()
+        const firstHandle = {
+            promise: first.promise,
+            cancel: vi.fn(() => first.reject(new Error('cancelled'))),
+        }
+        const secondHandle = {
+            promise: second.promise,
+            cancel: vi.fn(() => second.reject(new Error('cancelled'))),
+        }
+        youtubeMocks.waitForVideoElement
+            .mockReturnValueOnce(firstHandle)
+            .mockReturnValueOnce(secondHandle)
+        const init1 = mod.initForVideo('vid1')
+        mod.teardown()
+        const init2 = mod.initForVideo('vid2')
+        await init1
+        expect(mod.__testing.getState().waitHandle).toBe(secondHandle)
+        mod.teardown()
+        expect(secondHandle.cancel).toHaveBeenCalledTimes(1)
+        await init2
     })
 })

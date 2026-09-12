@@ -42,6 +42,9 @@ describe('youtube helpers', () => {
         Object.defineProperty(vod, 'duration', { value: 120 })
         Object.defineProperty(vod, 'seekable', { value: { length: 1 } })
         expect(isLiveVideo(vod)).toBe(false)
+        const loadingVod = document.createElement('video')
+        Object.defineProperty(loadingVod, 'duration', { value: 120 })
+        expect(isLiveVideo(loadingVod)).toBe(false)
     })
 
     it('clamps resume target', () => {
@@ -49,6 +52,7 @@ describe('youtube helpers', () => {
         expect(clampResumeTarget(150, 100)).toBeCloseTo(99.5)
         expect(clampResumeTarget(-5, 100)).toBe(0)
         expect(clampResumeTarget(10, Infinity)).toBe(10)
+        expect(clampResumeTarget(10, 0.75)).toBe(0.25)
     })
 
     it('finds title and channel', () => {
@@ -74,22 +78,43 @@ describe('youtube helpers', () => {
         const promise = handle.promise
 
         const video = document.createElement('video')
+        Object.defineProperty(video, 'readyState', { value: 1 })
         document.body.appendChild(video)
         await Promise.resolve()
         await expect(promise).resolves.toBe(video)
 
         document.body.innerHTML = ''
         const handle2 = waitForVideoElement(1000)
+        const cancelled = expect(handle2.promise).rejects.toThrow('cancelled')
         handle2.cancel()
-        let resolved = false
-        handle2.promise.then(() => {
-            resolved = true
-        })
         const laterVideo = document.createElement('video')
         document.body.appendChild(laterVideo)
         await Promise.resolve()
         vi.runAllTimers()
+        await cancelled
+        expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('waits for metadata on an existing video and removes listeners', async () => {
+        vi.useFakeTimers()
+        const video = document.createElement('video')
+        document.body.replaceChildren(video)
+        const remove = vi.spyOn(video, 'removeEventListener')
+        const handle = waitForVideoElement(1000)
+        let resolved = false
+        void handle.promise.then(() => {
+            resolved = true
+        })
+        await Promise.resolve()
         expect(resolved).toBe(false)
+        Object.defineProperty(video, 'readyState', { value: 1 })
+        video.dispatchEvent(new Event('loadedmetadata'))
+        await expect(handle.promise).resolves.toBe(video)
+        expect(remove).toHaveBeenCalledWith(
+            'loadedmetadata',
+            expect.any(Function),
+        )
+        expect(vi.getTimerCount()).toBe(0)
     })
 
     it('times out waiting for video', async () => {

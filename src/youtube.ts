@@ -15,11 +15,11 @@ export function getVideoId(): string | null {
 }
 
 export function isLiveVideo(video: HTMLVideoElement): boolean {
-    return video.duration === Infinity || video.seekable.length === 0
+    return video.duration === Infinity
 }
 
 export function clampResumeTarget(t: number, duration: number): number {
-    if (!Number.isFinite(duration) || duration <= 1) {
+    if (!Number.isFinite(duration) || duration <= 0) {
         return t
     }
     const maxTarget = Math.max(0, duration - 0.5)
@@ -70,68 +70,50 @@ type WaitHandle = {
 }
 
 export function waitForVideoElement(timeoutMs = 15000): WaitHandle {
-    let observer: MutationObserver | null = null
-    let timeoutId: number | null = null
-    let settled = false
-
+    let cancel = () => {}
     const promise = new Promise<HTMLVideoElement>((resolve, reject) => {
-        const existing = document.querySelector('video')
-        if (existing) {
+        let observer: MutationObserver | null = null
+        let timeoutId: number | null = null
+        let video: HTMLVideoElement | null = null
+        let settled = false
+
+        const finish = (error?: Error) => {
+            if (settled) return
             settled = true
-            resolve(existing)
-            return
+            observer?.disconnect()
+            if (timeoutId !== null) window.clearTimeout(timeoutId)
+            video?.removeEventListener('loadedmetadata', onReady)
+            if (error) reject(error)
+            else resolve(video!)
+        }
+        const onReady = () => {
+            if (video && video.readyState >= HTMLMediaElement.HAVE_METADATA)
+                finish()
+        }
+        const findVideo = () => {
+            const found = document.querySelector<HTMLVideoElement>('video')
+            if (found !== video) {
+                video?.removeEventListener('loadedmetadata', onReady)
+                video = found
+                video?.addEventListener('loadedmetadata', onReady)
+            }
+            onReady()
         }
 
-        const done = (fn: () => void) => {
-            if (settled) {
-                return
-            }
-            settled = true
-            if (observer) {
-                observer.disconnect()
-                observer = null
-            }
-            if (timeoutId !== null) {
-                window.clearTimeout(timeoutId)
-                timeoutId = null
-            }
-            fn()
-        }
-
-        observer = new MutationObserver(() => {
-            const found = document.querySelector('video')
-            if (found) {
-                done(() => resolve(found))
-            }
-        })
-
+        cancel = () => finish(new Error('cancelled waiting for video'))
+        findVideo()
+        if (settled) return
         if (!document.body) {
-            done(() => reject(new Error('document.body missing')))
+            finish(new Error('document.body missing'))
             return
         }
 
+        observer = new MutationObserver(findVideo)
         observer.observe(document.body, { childList: true, subtree: true })
-
         timeoutId = window.setTimeout(() => {
-            done(() => reject(new Error('timeout waiting for video')))
+            finish(new Error('timeout waiting for video'))
         }, timeoutMs)
     })
 
-    return {
-        promise,
-        cancel: () => {
-            if (settled) {
-                return
-            }
-            settled = true
-            if (observer) {
-                observer.disconnect()
-                observer = null
-            }
-            if (timeoutId !== null) {
-                window.clearTimeout(timeoutId)
-                timeoutId = null
-            }
-        },
-    }
+    return { promise, cancel }
 }
