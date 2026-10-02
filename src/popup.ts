@@ -20,6 +20,8 @@ import { getThumbnailUrl } from './youtube'
 type Tab = 'unfinished' | 'unwatched' | 'finished'
 
 let currentTab: Tab = 'unfinished'
+/** All stored videos, newest first. `null` until the first storage read. */
+let allVideos: VideoItem[] | null = null
 let videosByTab: Record<Tab, VideoItem[]> = {
     unfinished: [],
     unwatched: [],
@@ -304,20 +306,10 @@ function escapeHtml(value: string): string {
         .replace(/'/g, '&#39;')
 }
 
-async function refreshData(): Promise<void> {
-    const version = ++refreshVersion
-    const data = await getPopupData().catch((error: unknown) => {
-        if (version === refreshVersion) throw error
-        return null
-    })
-    if (!data || version !== refreshVersion) return
-    ignoredChannels = data.ignoredChannels
-    enabled = data.enabled
+function groupVideos(): void {
     const ignoredSet = new Set(ignoredChannels)
     videosByTab = { unfinished: [], unwatched: [], finished: [] }
-    for (const video of data.videos
-        .slice()
-        .sort((a, b) => b.updatedAt - a.updatedAt)) {
+    for (const video of allVideos ?? []) {
         if (
             !ignoredSet.has(
                 normalizeChannelName(video.channel || DEFAULT_CHANNEL_NAME),
@@ -326,8 +318,25 @@ async function refreshData(): Promise<void> {
             videosByTab[categorizeVideo(video)].push(video)
         }
     }
+}
+
+function renderAll(): void {
+    groupVideos()
     renderIgnoredChannels()
     render()
+}
+
+async function refreshData(): Promise<void> {
+    const version = ++refreshVersion
+    const data = await getPopupData().catch((error: unknown) => {
+        if (version === refreshVersion) throw error
+        return null
+    })
+    if (!data || version !== refreshVersion) return
+    allVideos = data.videos.slice().sort((a, b) => b.updatedAt - a.updatedAt)
+    ignoredChannels = data.ignoredChannels
+    enabled = data.enabled
+    renderAll()
 }
 
 function showError(message: string): void {
@@ -339,11 +348,17 @@ function showError(message: string): void {
     error.classList.toggle('hidden', !message)
 }
 
-function runMutation(operation: () => Promise<unknown>): void {
+/**
+ * Runs storage writes in the order of the user actions. Each operation also
+ * applies its result to the data in memory, so the full store is read only
+ * when a write completes before the first read did.
+ */
+function runMutation(operation: () => Promise<void>): void {
     mutationQueue = mutationQueue.then(async () => {
         try {
             await operation()
-            await refreshData()
+            if (allVideos) renderAll()
+            else await refreshData()
             showError('')
         } catch {
             render()
@@ -359,10 +374,17 @@ function handleVideoClick(event: Event): void {
     const button = event.target.closest<HTMLButtonElement>('button')
     if (!id || !button || button.disabled) return
     if (button.classList.contains('delete-btn')) {
-        runMutation(() => deleteVideoState(id))
+        runMutation(async () => {
+            await deleteVideoState(id)
+            allVideos =
+                allVideos?.filter((video) => video.videoId !== id) ?? null
+        })
     } else if (button.classList.contains('ignore-btn')) {
         const channel = button.dataset.channel
-        if (channel) runMutation(() => addIgnoredChannel(channel))
+        if (channel)
+            runMutation(async () => {
+                ignoredChannels = await addIgnoredChannel(channel)
+            })
     } else {
         openVideo(id, Number(button.dataset.time))
     }
@@ -373,7 +395,10 @@ function handleIgnoredClick(event: Event): void {
     const channel =
         event.target.closest<HTMLButtonElement>('.ignored-remove')?.dataset
             .channel
-    if (channel) runMutation(() => removeIgnoredChannel(channel))
+    if (channel)
+        runMutation(async () => {
+            ignoredChannels = await removeIgnoredChannel(channel)
+        })
 }
 
 function setSettingsOpen(open: boolean): void {
@@ -420,7 +445,10 @@ document.addEventListener(
         ) as HTMLInputElement | null
         toggle?.addEventListener('change', () => {
             const nextEnabled = toggle.checked
-            runMutation(() => setEnabled(nextEnabled))
+            runMutation(async () => {
+                await setEnabled(nextEnabled)
+                enabled = nextEnabled
+            })
         })
 
         const searchInput = document.getElementById(

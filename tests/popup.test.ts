@@ -494,6 +494,32 @@ describe('popup', () => {
         )
     })
 
+    it('applies changes without another read of the full store', async () => {
+        const storage = await import('../src/storage')
+        vi.mocked(storage.getPopupData).mockClear()
+        document.querySelector<HTMLButtonElement>('.ignore-btn')!.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(document.querySelectorAll('.card')).toHaveLength(0)
+        expect(document.getElementById('ignored-count')?.textContent).toBe('1')
+
+        document.querySelector<HTMLButtonElement>('.ignored-remove')!.click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        document.querySelector<HTMLButtonElement>('.delete-btn')!.click()
+        const toggle = document.getElementById(
+            'toggle-enabled',
+        ) as HTMLInputElement
+        toggle.checked = false
+        toggle.dispatchEvent(new Event('change'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(document.querySelectorAll('.card')).toHaveLength(0)
+        expect(
+            document.querySelector('[data-tab="unfinished"] .tab-count'),
+        ).toBeNull()
+        expect(document.body.classList.contains('is-disabled')).toBe(true)
+        expect(storage.getPopupData).not.toHaveBeenCalled()
+    })
+
     it('toggles enabled state', async () => {
         setBaseDom()
         vi.resetModules()
