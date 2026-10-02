@@ -1,19 +1,18 @@
-import { watchUrlChanges, type UrlChangeHandler } from './spa'
 import {
-    getTrackingSettings,
     getVideoState,
     normalizeChannelName,
     setVideoState,
+    watchTrackingSettings,
+    type TrackingSettings,
 } from './storage'
 import {
     clampResumeTarget,
     getChannelName,
+    getMainVideo,
     getVideoId,
     getVideoTitle,
     hasExplicitStartTime,
     isLiveVideo,
-    isWatchPage,
-    waitForVideoElement,
 } from './youtube'
 import type { StoredVideoState } from './types'
 import {
@@ -23,157 +22,155 @@ import {
     DEFAULT_CHANNEL_NAME,
     SAVE_INTERVAL_SECONDS,
     NEAR_START_WINDOW_SECONDS,
+    DURATION_MATCH_SECONDS,
     DEBUG,
 } from './constants'
 import { log } from './util'
-import { debounce } from './debounce'
 import { isFinished } from './progress'
 
 let activeVideoId: string | null = null
-let activeVideo: HTMLVideoElement | null = null
+/** Changes with each video, so that late storage replies for an old one are dropped. */
+let sessionToken = 0
+/** `undefined` until the stored state of the active video is read. */
+let storedState: StoredVideoState | null | undefined = undefined
+let settings: TrackingSettings | null = null
+let resumePending = false
+/**
+ * False from an in-page navigation until the player loads new metadata. In that
+ * gap the URL already names the next video, but the player holds the previous one.
+ */
+let mediaFresh = true
+let currentFurthestTime = 0
 let saveIntervalId: number | null = null
 let lastWriteAt = 0
 let savingToken: number | null = null
-let initToken = 0
-let waitHandle: ReturnType<typeof waitForVideoElement> | null = null
 let resumeReapplyId: number | null = null
-let currentFurthestTime = 0
-let unwatchUrlChanges: (() => void) | null = null
+let stopWatchingSettings: (() => void) | null = null
 let hasInit = false
-let beforeUnloadAttached = false
+
+function getState() {
+    return {
+        activeVideoId,
+        sessionToken,
+        storedState,
+        settings,
+        resumePending,
+        mediaFresh,
+        currentFurthestTime,
+        saveIntervalId,
+        lastWriteAt,
+        resumeReapplyId,
+        hasInit,
+    }
+}
 
 if (DEBUG) {
-    Object.assign(globalThis, {
-        getState: () => ({
-            activeVideo,
-            activeVideoId,
-            lastWriteAt,
-            initToken,
-            waitHandle,
-            resumeReapplyId,
-            saveIntervalId,
-        }),
-    })
+    Object.assign(globalThis, { getState })
 }
 
 export function teardown(): void {
-    initToken += 1
-
-    if (saveIntervalId !== null) {
-        window.clearInterval(saveIntervalId)
-        saveIntervalId = null
-    }
+    sessionToken += 1
+    stopSavingLoop()
 
     if (resumeReapplyId !== null) {
         window.clearTimeout(resumeReapplyId)
         resumeReapplyId = null
     }
 
-    if (waitHandle) {
-        waitHandle.cancel()
-        waitHandle = null
-    }
-
-    if (activeVideo) {
-        activeVideo.removeEventListener('pause', onPause)
-        activeVideo.removeEventListener('play', onPlay)
-    }
-    document.removeEventListener('visibilitychange', onVisibilityChange)
-
-    activeVideo = null
     activeVideoId = null
+    storedState = undefined
+    resumePending = false
     lastWriteAt = 0
     savingToken = null
     currentFurthestTime = 0
 }
 
-export function isSafeToSave(video: HTMLVideoElement): boolean {
-    if (!isWatchPage()) {
-        return false
-    }
-    if (!activeVideoId) {
-        return false
-    }
-    if (isLiveVideo(video)) {
-        return false
-    }
-    const t = video.currentTime
-    if (!Number.isFinite(t) || t <= 0) {
-        return false
-    }
-    return true
+function isMainVideo(target: EventTarget | null): target is HTMLVideoElement {
+    return target instanceof HTMLVideoElement && target === getMainVideo()
 }
 
-export async function saveNow(reason: string): Promise<void> {
-    const token = initToken
+function isIgnoredChannel(channel: string | null | undefined): boolean {
+    return (
+        !!channel &&
+        !!settings?.ignoredChannels.includes(normalizeChannelName(channel))
+    )
+}
+
+/** True when the player holds the active video, with its metadata available. */
+function hasActiveMedia(video: HTMLVideoElement): boolean {
+    if (video.readyState < HTMLMediaElement.HAVE_METADATA) {
+        return false
+    }
+    // A stale player is the same video only if its length is the stored length.
+    return (
+        mediaFresh ||
+        (!!storedState &&
+            Math.abs(storedState.duration - video.duration) <=
+                DURATION_MATCH_SECONDS)
+    )
+}
+
+export async function saveNow(
+    reason: string,
+    options: { leaving?: boolean } = {},
+): Promise<void> {
+    const token = sessionToken
     const videoId = activeVideoId
-    const video = activeVideo
+    const video = getMainVideo()
     const now = Date.now()
     if (
         !videoId ||
         !video ||
-        videoId !== getVideoId() ||
-        !isSafeToSave(video) ||
+        !settings?.enabled ||
+        // The furthest time is not known before the stored state is read.
+        storedState === undefined ||
+        savingToken === token ||
         now - lastWriteAt < MIN_WRITE_GAP_MS ||
-        savingToken === token
+        // During a navigation the URL changes before the player does.
+        (!options.leaving && videoId !== getVideoId()) ||
+        !hasActiveMedia(video) ||
+        isLiveVideo(video)
     ) {
-        log('not saving', { videoId, video, now, lastWriteAt })
         return
     }
 
     const time = video.currentTime
-    const duration =
-        Number.isFinite(video.duration) && video.duration > 0
-            ? video.duration
-            : Infinity
-    const title = getVideoTitle() ?? DEFAULT_VIDEO_TITLE
-    const channel = getChannelName() ?? DEFAULT_CHANNEL_NAME
+    if (!Number.isFinite(time) || time <= 0 || time === storedState?.t) {
+        return
+    }
+    const channel =
+        getChannelName() ?? storedState?.channel ?? DEFAULT_CHANNEL_NAME
+    if (isIgnoredChannel(channel)) {
+        return
+    }
+
+    const payload: StoredVideoState = {
+        t: time,
+        ft: Math.max(currentFurthestTime, time),
+        updatedAt: now,
+        duration:
+            Number.isFinite(video.duration) && video.duration > 0
+                ? video.duration
+                : Infinity,
+        channel,
+        title: getVideoTitle() ?? storedState?.title ?? DEFAULT_VIDEO_TITLE,
+    }
+    log('save', reason, payload)
 
     savingToken = token
     try {
-        const settings = await getTrackingSettings()
-        if (
-            token !== initToken ||
-            video !== activeVideo ||
-            videoId !== getVideoId() ||
-            !settings.enabled ||
-            settings.ignoredChannels.includes(normalizeChannelName(channel))
-        )
-            return
-
-        const payload: StoredVideoState = {
-            t: time,
-            ft: Math.max(currentFurthestTime, time),
-            updatedAt: now,
-            duration,
-            channel,
-            title,
-        }
-        log('save', reason, payload)
+        // No await comes before this call, so a save at page close is sent.
         await setVideoState(videoId, payload)
-        if (token === initToken) {
+        if (token === sessionToken) {
             lastWriteAt = now
             currentFurthestTime = payload.ft
+            storedState = payload
         }
     } catch (error) {
         log('save failed', error)
     } finally {
         if (savingToken === token) savingToken = null
     }
-}
-
-export function onPause(): void {
-    void saveNow('pause')
-    stopSavingLoop()
-}
-
-export function onPlay(): void {
-    startSavingLoop()
-}
-
-export function onVisibilityChange(): void {
-    // A hidden tab can continue to play, so only the pause event stops the loop.
-    if (document.hidden) void saveNow('hidden')
 }
 
 export function stopSavingLoop(): void {
@@ -185,7 +182,7 @@ export function stopSavingLoop(): void {
 }
 
 export function startSavingLoop(): void {
-    if (saveIntervalId !== null) {
+    if (saveIntervalId !== null || !activeVideoId) {
         return
     }
     log('start saving loop')
@@ -194,31 +191,32 @@ export function startSavingLoop(): void {
     }, SAVE_INTERVAL_SECONDS * 1000)
 }
 
-export async function tryResume(
-    video: HTMLVideoElement,
-    videoId: string,
-    token: number,
-): Promise<void> {
-    const [state, settings] = await Promise.all([
-        getVideoState(videoId),
-        getTrackingSettings(),
-    ])
-    if (token !== initToken || videoId !== getVideoId()) {
+/**
+ * Seeks to the stored time once the stored state, the settings, and the
+ * metadata of the active video are all available. It is safe to call often.
+ */
+export function tryResume(): void {
+    const video = getMainVideo()
+    const videoId = activeVideoId
+    if (
+        !resumePending ||
+        !videoId ||
+        !settings ||
+        storedState === undefined ||
+        !video ||
+        !hasActiveMedia(video)
+    ) {
         return
     }
+    resumePending = false
 
-    if (state) {
-        currentFurthestTime = typeof state.ft === 'number' ? state.ft : state.t
-    } else {
-        currentFurthestTime = 0
-    }
-
+    const state = storedState
     if (
         !settings.enabled ||
-        settings.ignoredChannels.includes(
-            normalizeChannelName(getChannelName() ?? DEFAULT_CHANNEL_NAME),
-        ) ||
         !state ||
+        // The page can show the channel late, so the stored name counts too.
+        isIgnoredChannel(getChannelName()) ||
+        isIgnoredChannel(state.channel) ||
         state.t < MIN_RESUME_SECONDS ||
         hasExplicitStartTime() ||
         isLiveVideo(video) ||
@@ -234,6 +232,7 @@ export async function tryResume(
         return
     }
 
+    const token = sessionToken
     const target = clampResumeTarget(state.t, video.duration)
     log('resume', { videoId, target, current: video.currentTime })
     video.currentTime = target
@@ -241,8 +240,8 @@ export async function tryResume(
     resumeReapplyId = window.setTimeout(() => {
         resumeReapplyId = null
         if (
-            token !== initToken ||
-            videoId !== activeVideoId ||
+            token !== sessionToken ||
+            video !== getMainVideo() ||
             videoId !== getVideoId() ||
             hasExplicitStartTime()
         ) {
@@ -258,130 +257,130 @@ export async function tryResume(
     }, 500)
 }
 
-export async function initForVideo(videoId: string): Promise<void> {
-    const token = ++initToken
+function startSession(videoId: string): void {
+    const token = ++sessionToken
     log('init', videoId)
+    activeVideoId = videoId
+    resumePending = true
 
-    const handle = waitForVideoElement(15000)
-    waitHandle = handle
-    let video: HTMLVideoElement
-    try {
-        video = await handle.promise
-    } catch (err) {
-        log('video wait failed', err)
-        return
-    } finally {
-        if (waitHandle === handle) {
-            waitHandle = null
-        }
-    }
+    getVideoState(videoId).then(
+        (state) => {
+            if (token !== sessionToken) return
+            storedState = state
+            currentFurthestTime = state ? state.ft : 0
+            tryResume()
+        },
+        (error) => log('state read failed', error),
+    )
 
-    if (token !== initToken) {
-        return
-    }
-
-    activeVideo = video
-
-    try {
-        await tryResume(video, videoId, token)
-    } catch (error) {
-        log('resume failed', error)
-        return
-    }
-    if (token !== initToken) {
-        return
-    }
-
-    video.addEventListener('pause', onPause)
-    video.addEventListener('play', onPlay)
-    document.addEventListener('visibilitychange', onVisibilityChange)
-
-    if (!video.paused) {
+    const video = getMainVideo()
+    if (video && !video.paused) {
         startSavingLoop()
     }
 }
 
-export const handleUrlChange: UrlChangeHandler = () => {
+export function handleUrlChange(): void {
     const nextVideoId = getVideoId()
-    log('url change', { nextVideoId, activeVideoId })
     if (nextVideoId === activeVideoId) {
         return
     }
+    log('url change', { nextVideoId, activeVideoId })
     teardown()
-    activeVideoId = nextVideoId
-    if (!nextVideoId) {
+    mediaFresh = false
+    if (nextVideoId) {
+        startSession(nextVideoId)
+    }
+}
+
+export function onNavigateStart(): void {
+    // Last chance to save: the player still holds the video the user leaves.
+    if (activeVideoId && activeVideoId !== getVideoId()) {
+        void saveNow('navigate', { leaving: true })
+    }
+    handleUrlChange()
+}
+
+export function onLoadedMetadata(event: Event): void {
+    if (!isMainVideo(event.target)) {
         return
     }
-    void initForVideo(nextVideoId)
-}
-
-const debouncedHandleUrlChange = debounce(handleUrlChange, 150)
-
-function cleanupGlobalListeners(): void {
-    debouncedHandleUrlChange.cancel()
-    if (unwatchUrlChanges) {
-        unwatchUrlChanges()
-        unwatchUrlChanges = null
-    }
-    if (beforeUnloadAttached) {
-        window.removeEventListener(
-            'yt-navigate-finish',
-            debouncedHandleUrlChange,
-        )
-        window.removeEventListener('beforeunload', onBeforeUnload)
-        beforeUnloadAttached = false
+    handleUrlChange()
+    mediaFresh = true
+    tryResume()
+    if (!event.target.paused) {
+        startSavingLoop()
     }
 }
 
-function onBeforeUnload(): void {
-    cleanupGlobalListeners()
+export function onPlay(event: Event): void {
+    if (isMainVideo(event.target)) {
+        startSavingLoop()
+    }
 }
+
+export function onPause(event: Event): void {
+    if (isMainVideo(event.target)) {
+        void saveNow('pause')
+        stopSavingLoop()
+    }
+}
+
+export function onVisibilityChange(): void {
+    // A hidden tab can continue to play, so only the pause event stops the loop.
+    if (document.hidden) void saveNow('hidden')
+}
+
+export function onPageHide(): void {
+    void saveNow('pagehide')
+}
+
+// Media events do not bubble. The capture phase gets them for a player that
+// does not exist yet, so there is no need to observe the DOM for it.
+const globalListeners: [EventTarget, string, EventListener, boolean][] = [
+    [document, 'loadedmetadata', onLoadedMetadata, true],
+    [document, 'play', onPlay, true],
+    [document, 'pause', onPause, true],
+    [document, 'visibilitychange', onVisibilityChange, false],
+    [window, 'pagehide', onPageHide, false],
+    [window, 'yt-navigate-start', onNavigateStart, false],
+    [window, 'yt-navigate-finish', handleUrlChange, false],
+    [window, 'popstate', handleUrlChange, false],
+]
 
 export function initContentScript(): void {
-    if (document.documentElement.dataset.timestampGoblinDisabled === 'true') {
-        return
-    }
     if (hasInit) {
         return
     }
     hasInit = true
-    unwatchUrlChanges = watchUrlChanges(debouncedHandleUrlChange, {
-        debounceMs: 0,
+    stopWatchingSettings = watchTrackingSettings((next) => {
+        settings = next
+        tryResume()
     })
-    window.addEventListener('yt-navigate-finish', debouncedHandleUrlChange)
-    window.addEventListener('beforeunload', onBeforeUnload)
-    beforeUnloadAttached = true
+    for (const [target, type, listener, capture] of globalListeners) {
+        target.addEventListener(type, listener, capture)
+    }
     handleUrlChange()
+    // The first player of a document cannot hold a previous video.
+    mediaFresh = true
+    tryResume()
 }
 
 initContentScript()
 
 export const __testing = {
-    getState: () => ({
-        activeVideo,
-        activeVideoId,
-        lastWriteAt,
-        initToken,
-        waitHandle,
-        resumeReapplyId,
-        saveIntervalId,
-        currentFurthestTime,
-        hasInit,
-    }),
-    setActive: (videoId: string | null, video: HTMLVideoElement | null) => {
-        activeVideoId = videoId
-        activeVideo = video
-    },
+    getState,
     setLastWriteAt: (value: number) => {
         lastWriteAt = value
     },
-    setInitToken: (value: number) => {
-        initToken = value
-    },
     resetForTests: () => {
         teardown()
-        cleanupGlobalListeners()
+        for (const [target, type, listener, capture] of globalListeners) {
+            target.removeEventListener(type, listener, capture)
+        }
+        stopWatchingSettings?.()
+        stopWatchingSettings = null
+        settings = null
+        mediaFresh = true
         hasInit = false
-        beforeUnloadAttached = false
     },
 }

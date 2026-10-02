@@ -176,6 +176,83 @@ describe('storage', () => {
         ])
     })
 
+    it('reports tracking settings now and after each settings change', async () => {
+        const { watchTrackingSettings } = await import('../src/storage')
+        type Listener = (changes: Record<string, unknown>) => void
+        const listeners = new Set<Listener>()
+        Object.assign(chrome.storage.local, {
+            onChanged: {
+                addListener: (listener: Listener) => listeners.add(listener),
+                removeListener: (listener: Listener) =>
+                    listeners.delete(listener),
+            },
+        })
+        const change = async (values: Store) => {
+            await chrome.storage.local.set(values)
+            listeners.forEach((listener) => listener(values))
+            await Promise.resolve()
+            await Promise.resolve()
+        }
+        const onSettings = vi.fn()
+        const stop = watchTrackingSettings(onSettings)
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(onSettings).toHaveBeenLastCalledWith({
+            enabled: true,
+            ignoredChannels: [],
+        })
+
+        await change({ enabled: false, 'ignored:channels': [' Channel '] })
+        expect(onSettings).toHaveBeenLastCalledWith({
+            enabled: false,
+            ignoredChannels: ['channel'],
+        })
+
+        // A progress save is not a settings change and must not cause a read.
+        vi.mocked(chrome.storage.local.get).mockClear()
+        await change({ 'ytp:abc': { t: 1, updatedAt: 1 } })
+        expect(chrome.storage.local.get).not.toHaveBeenCalled()
+        expect(onSettings).toHaveBeenCalledTimes(2)
+
+        stop()
+        expect(listeners.size).toBe(0)
+        await change({ enabled: true })
+        expect(onSettings).toHaveBeenCalledTimes(2)
+    })
+
+    it('drops a settings read that a stop call or a newer read replaces', async () => {
+        const { watchTrackingSettings } = await import('../src/storage')
+        let notify: (changes: Record<string, unknown>) => void = () => {}
+        Object.assign(chrome.storage.local, {
+            onChanged: {
+                addListener: (listener: typeof notify) => {
+                    notify = listener
+                },
+                removeListener: () => {},
+            },
+        })
+        const onSettings = vi.fn()
+        const stop = watchTrackingSettings(onSettings)
+        await chrome.storage.local.set({ enabled: false })
+        notify({ enabled: {} })
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(onSettings).toHaveBeenCalledTimes(1)
+        expect(onSettings).toHaveBeenCalledWith({
+            enabled: false,
+            ignoredChannels: [],
+        })
+
+        vi.mocked(chrome.storage.local.get).mockRejectedValueOnce(
+            new Error('unavailable'),
+        )
+        notify({ enabled: {} })
+        stop()
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(onSettings).toHaveBeenCalledTimes(1)
+    })
+
     it('loads popup records and settings in one storage call', async () => {
         const { getPopupData } = await import('../src/storage')
         await chrome.storage.local.set({

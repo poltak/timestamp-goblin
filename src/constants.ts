@@ -5,6 +5,8 @@ export const SAVE_INTERVAL_SECONDS = 8
 export const MIN_RESUME_SECONDS = 15
 export const NEAR_START_WINDOW_SECONDS = 6
 export const MIN_WRITE_GAP_MS = 1000
+/** Two loads of one video can report slightly different lengths. */
+export const DURATION_MATCH_SECONDS = 2
 
 export const MAX_POPUP_ITEMS = 20
 export const DEFAULT_UNFINISHED_BUFFER_SECONDS = 15

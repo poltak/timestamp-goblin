@@ -124,10 +124,12 @@ export async function getIgnoredChannels(): Promise<string[]> {
     return readIgnoredChannels(result[IGNORED_CHANNELS_KEY])
 }
 
-export async function getTrackingSettings(): Promise<{
+export interface TrackingSettings {
     enabled: boolean
     ignoredChannels: string[]
-}> {
+}
+
+export async function getTrackingSettings(): Promise<TrackingSettings> {
     const result = await chrome.storage.local.get([
         ENABLED_KEY,
         IGNORED_CHANNELS_KEY,
@@ -138,6 +140,34 @@ export async function getTrackingSettings(): Promise<{
                 ? result[ENABLED_KEY]
                 : true,
         ignoredChannels: readIgnoredChannels(result[IGNORED_CHANNELS_KEY]),
+    }
+}
+
+/**
+ * Reports the tracking settings now and after each change, so that callers on a
+ * hot path do not read storage. Returns a function that stops the reports.
+ */
+export function watchTrackingSettings(
+    onSettings: (settings: TrackingSettings) => void,
+): () => void {
+    let version = 0
+    const load = () => {
+        const current = ++version
+        getTrackingSettings().then(
+            (settings) => {
+                if (current === version) onSettings(settings)
+            },
+            () => {},
+        )
+    }
+    const onChanged = (changes: Record<string, unknown>) => {
+        if (ENABLED_KEY in changes || IGNORED_CHANNELS_KEY in changes) load()
+    }
+    chrome.storage.local.onChanged.addListener(onChanged)
+    load()
+    return () => {
+        version += 1
+        chrome.storage.local.onChanged.removeListener(onChanged)
     }
 }
 

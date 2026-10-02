@@ -1,14 +1,14 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
     clampResumeTarget,
     getChannelName,
+    getMainVideo,
     getThumbnailUrl,
     getVideoId,
     getVideoTitle,
     hasExplicitStartTime,
     isLiveVideo,
     isWatchPage,
-    waitForVideoElement,
 } from '../src/youtube'
 
 describe('youtube helpers', () => {
@@ -98,75 +98,22 @@ describe('youtube helpers', () => {
         expect(getChannelName()).toBeNull()
     })
 
-    it('selects the watch player instead of an earlier preview', async () => {
+    it('selects the watch player instead of an earlier preview', () => {
         const preview = document.createElement('video')
         const player = document.createElement('div')
         player.id = 'movie_player'
         const video = document.createElement('video')
         player.appendChild(video)
-        for (const item of [preview, video])
-            Object.defineProperty(item, 'readyState', { value: 1 })
         document.body.replaceChildren(preview, player)
-        const handle = waitForVideoElement()
-        await expect(handle.promise).resolves.toBe(video)
+        expect(getMainVideo()).toBe(video)
     })
 
-    it('waits for video element and can cancel', async () => {
-        vi.useFakeTimers()
-        document.body.innerHTML = ''
-
-        const handle = waitForVideoElement(1000)
-        const promise = handle.promise
-
+    it('finds the main video by its class, or reports that there is none', () => {
+        document.body.replaceChildren()
+        expect(getMainVideo()).toBeNull()
         const video = document.createElement('video')
         video.className = 'html5-main-video'
-        Object.defineProperty(video, 'readyState', { value: 1 })
-        document.body.appendChild(video)
-        await Promise.resolve()
-        await expect(promise).resolves.toBe(video)
-
-        document.body.innerHTML = ''
-        const handle2 = waitForVideoElement(1000)
-        const cancelled = expect(handle2.promise).rejects.toThrow('cancelled')
-        handle2.cancel()
-        const laterVideo = document.createElement('video')
-        document.body.appendChild(laterVideo)
-        await Promise.resolve()
-        vi.runAllTimers()
-        await cancelled
-        expect(vi.getTimerCount()).toBe(0)
-    })
-
-    it('waits for metadata on an existing video and removes listeners', async () => {
-        vi.useFakeTimers()
-        const video = document.createElement('video')
-        video.className = 'html5-main-video'
-        document.body.replaceChildren(video)
-        const remove = vi.spyOn(video, 'removeEventListener')
-        const handle = waitForVideoElement(1000)
-        let resolved = false
-        void handle.promise.then(() => {
-            resolved = true
-        })
-        await Promise.resolve()
-        expect(resolved).toBe(false)
-        Object.defineProperty(video, 'readyState', { value: 1 })
-        video.dispatchEvent(new Event('loadedmetadata'))
-        await expect(handle.promise).resolves.toBe(video)
-        expect(remove).toHaveBeenCalledWith(
-            'loadedmetadata',
-            expect.any(Function),
-        )
-        expect(vi.getTimerCount()).toBe(0)
-    })
-
-    it('times out waiting for video', async () => {
-        vi.useFakeTimers()
-        document.body.innerHTML = ''
-        const handle = waitForVideoElement(10)
-        vi.advanceTimersByTime(11)
-        await expect(handle.promise).rejects.toThrow(
-            'timeout waiting for video',
-        )
+        document.body.replaceChildren(document.createElement('video'), video)
+        expect(getMainVideo()).toBe(video)
     })
 })

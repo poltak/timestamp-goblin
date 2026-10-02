@@ -73,62 +73,10 @@ export function getChannelName(): string | null {
     ])
 }
 
-type WaitHandle = {
-    promise: Promise<HTMLVideoElement>
-    cancel: () => void
-}
-
-export function waitForVideoElement(timeoutMs = 15000): WaitHandle {
-    let cancel = () => {}
-    const promise = new Promise<HTMLVideoElement>((resolve, reject) => {
-        let observer: MutationObserver | null = null
-        let timeoutId: number | null = null
-        let video: HTMLVideoElement | null = null
-        let settled = false
-
-        const finish = (error?: Error) => {
-            if (settled) return
-            settled = true
-            observer?.disconnect()
-            if (timeoutId !== null) window.clearTimeout(timeoutId)
-            video?.removeEventListener('loadedmetadata', onReady)
-            if (error) reject(error)
-            else resolve(video!)
-        }
-        const onReady = () => {
-            if (video && video.readyState >= HTMLMediaElement.HAVE_METADATA)
-                finish()
-        }
-        const findVideo = () => {
-            const found =
-                document.querySelector<HTMLVideoElement>(
-                    '#movie_player video',
-                ) ??
-                document.querySelector<HTMLVideoElement>(
-                    'video.html5-main-video',
-                )
-            if (found !== video) {
-                video?.removeEventListener('loadedmetadata', onReady)
-                video = found
-                video?.addEventListener('loadedmetadata', onReady)
-            }
-            onReady()
-        }
-
-        cancel = () => finish(new Error('cancelled waiting for video'))
-        findVideo()
-        if (settled) return
-        if (!document.body) {
-            finish(new Error('document.body missing'))
-            return
-        }
-
-        observer = new MutationObserver(findVideo)
-        observer.observe(document.body, { childList: true, subtree: true })
-        timeoutId = window.setTimeout(() => {
-            finish(new Error('timeout waiting for video'))
-        }, timeoutMs)
-    })
-
-    return { promise, cancel }
+/** The watch player, not a hover preview or another player on the page. */
+export function getMainVideo(): HTMLVideoElement | null {
+    return (
+        document.querySelector<HTMLVideoElement>('#movie_player video') ??
+        document.querySelector<HTMLVideoElement>('video.html5-main-video')
+    )
 }
