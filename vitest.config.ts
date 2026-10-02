@@ -9,6 +9,8 @@ export default defineConfig({
         },
         coverage: {
             provider: 'v8',
+            // Build and release scripts run as separate processes.
+            include: ['src/**'],
             reporter: ['text', 'html'],
             thresholds: {
                 lines: 90,
