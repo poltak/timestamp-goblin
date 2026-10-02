@@ -324,13 +324,16 @@ describe('popup', () => {
             'Unfinished',
         )
         const tabs = document.querySelectorAll<HTMLButtonElement>('.tab-btn')
-        const counts = Array.from(tabs).map(
-            (tab) => tab.querySelector('.tab-count')?.textContent,
-        )
-        expect(counts).toEqual(['1', '1', '1'])
+        const getCounts = () =>
+            Array.from(tabs).map(
+                (tab) => tab.querySelector('.tab-count')?.textContent,
+            )
+        // During a search, a tab shows the number of its videos that match.
+        expect(getCounts()).toEqual(['1', undefined, undefined])
 
         search.value = 'CHAN'
         search.dispatchEvent(new Event('input'))
+        expect(getCounts()).toEqual(['1', '1', '1'])
         tabs[1].click()
 
         expect(document.querySelectorAll('.card')).toHaveLength(1)
@@ -459,6 +462,8 @@ describe('popup', () => {
         expect(ignoredList?.textContent).toContain('chan a')
 
         const tabs = document.querySelectorAll<HTMLButtonElement>('.tab-btn')
+        search.value = ''
+        search.dispatchEvent(new Event('input'))
         const counts = Array.from(tabs).map(
             (tab) => tab.querySelector('.tab-count')?.textContent,
         )
@@ -518,6 +523,147 @@ describe('popup', () => {
         ).toBeNull()
         expect(document.body.classList.contains('is-disabled')).toBe(true)
         expect(storage.getPopupData).not.toHaveBeenCalled()
+    })
+
+    it('offers the tabs that have matches when the active tab has none', async () => {
+        const search = document.getElementById(
+            'video-search',
+        ) as HTMLInputElement
+        search.value = 'finished'
+        search.dispatchEvent(new Event('input'))
+        expect(document.querySelectorAll('.card')).toHaveLength(0)
+        expect(document.getElementById('empty-description')?.textContent).toBe(
+            'No match for "finished" in the In progress tab. There are matches in:',
+        )
+        const jump = document.querySelector<HTMLButtonElement>('.empty-jump')!
+        expect(jump.textContent).toBe('Finished (1)')
+        jump.click()
+        expect(document.querySelector('.card')?.textContent).toContain(
+            'Finished',
+        )
+        expect(
+            document
+                .querySelector('[data-tab="finished"]')
+                ?.classList.contains('active'),
+        ).toBe(true)
+        expect(search.value).toBe('finished')
+
+        search.value = ''
+        search.dispatchEvent(new Event('input'))
+        document.querySelectorAll<HTMLButtonElement>('.delete-btn')[0].click()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(
+            document.getElementById('empty')?.classList.contains('hidden'),
+        ).toBe(false)
+        expect(document.querySelector('.empty-jump')).toBeNull()
+    })
+
+    it('shows more videos in steps of 20 and resets with the tab', async () => {
+        setBaseDom()
+        videos = Array.from({ length: 45 }, (_, index) => ({
+            videoId: `video-${index}`,
+            t: 20,
+            ft: 20,
+            updatedAt: 45 - index,
+            duration: 100,
+            title: `Video ${index}`,
+            channel: 'Channel',
+        }))
+        vi.resetModules()
+        await import('../src/popup')
+        document.dispatchEvent(new Event('DOMContentLoaded'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        const showMore = document.getElementById('show-more')!
+        const summary = document.getElementById('result-summary')!
+        expect(document.querySelectorAll('.card')).toHaveLength(20)
+        expect(summary.textContent).toBe('20 of 45 videos')
+        expect(showMore.textContent).toBe('Show more (25 left)')
+        const firstCard = document.querySelector('.card')
+
+        showMore.click()
+        expect(document.querySelectorAll('.card')).toHaveLength(40)
+        expect(document.querySelector('.card')).toBe(firstCard)
+        showMore.click()
+        expect(document.querySelectorAll('.card')).toHaveLength(45)
+        expect(showMore.classList.contains('hidden')).toBe(true)
+        expect(summary.textContent).toBe('45 videos')
+
+        document
+            .querySelector<HTMLButtonElement>('[data-tab=finished]')!
+            .click()
+        document
+            .querySelector<HTMLButtonElement>('[data-tab=unfinished]')!
+            .click()
+        expect(document.querySelectorAll('.card')).toHaveLength(20)
+    })
+
+    it('names the main action for the state of each video', async () => {
+        const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+        const tabs = document.querySelectorAll<HTMLButtonElement>('.tab-btn')
+        const card = () =>
+            document.querySelector<HTMLButtonElement>('.last-btn')!
+
+        expect(card().querySelector('.resume-label')?.textContent).toBe(
+            'Resume 0:30',
+        )
+        tabs[1].click()
+        expect(card().querySelector('.resume-label')?.textContent).toBe('Play')
+        expect(card().getAttribute('aria-label')).toBe(
+            'Play Unwatched from the start',
+        )
+        expect(document.querySelector('.furthest-btn')).toBeNull()
+        card().click()
+        expect(openSpy).toHaveBeenLastCalledWith(
+            'https://www.youtube.com/watch?v=b2',
+            '_blank',
+        )
+
+        tabs[2].click()
+        expect(card().querySelector('.resume-label')?.textContent).toBe(
+            'Watch again',
+        )
+        expect(card().getAttribute('aria-label')).toBe('Watch Finished again')
+        expect(document.querySelector('.furthest-btn')).toBeNull()
+        card().click()
+        expect(openSpy).toHaveBeenLastCalledWith(
+            'https://www.youtube.com/watch?v=c3',
+            '_blank',
+        )
+        openSpy.mockRestore()
+    })
+
+    it('shows the furthest point only when it is ahead and not the end', async () => {
+        setBaseDom()
+        videos = [
+            { ...seedVideos[0], videoId: 'same', t: 30, ft: 32 },
+            { ...seedVideos[0], videoId: 'ahead', t: 30, ft: 60 },
+            { ...seedVideos[0], videoId: 'ended', t: 30, ft: 99 },
+            {
+                ...seedVideos[0],
+                videoId: 'unknown',
+                t: 5000,
+                ft: 5000,
+                duration: Infinity,
+            },
+        ]
+        vi.resetModules()
+        await import('../src/popup')
+        document.dispatchEvent(new Event('DOMContentLoaded'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        const card = (id: string) =>
+            document.querySelector<HTMLElement>(`[data-video-id="${id}"]`)!
+        expect(card('same').querySelector('.furthest-btn')).toBeNull()
+        expect(
+            card('ahead').querySelector('.furthest-btn')?.textContent,
+        ).toMatch(/1:00/)
+        expect(card('ended').querySelector('.furthest-btn')).toBeNull()
+        // A video with no known length is in progress, with no bar to show.
+        expect(card('same').querySelector('.bar')).not.toBeNull()
+        expect(card('unknown').querySelector('.bar')).toBeNull()
+        expect(card('unknown').querySelector('.video-duration')).toBeNull()
+        expect(card('unknown').textContent).toContain('Resume 1:23:20')
     })
 
     it('toggles enabled state', async () => {

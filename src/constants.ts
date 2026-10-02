@@ -8,7 +8,10 @@ export const MIN_WRITE_GAP_MS = 1000
 /** Two loads of one video can report slightly different lengths. */
 export const DURATION_MATCH_SECONDS = 2
 
+/** Cards that the popup adds for each "Show more" step. */
 export const MAX_POPUP_ITEMS = 20
+/** A furthest point this near to the last point gets no button of its own. */
+export const FURTHEST_MIN_GAP_SECONDS = 5
 export const DEFAULT_UNFINISHED_BUFFER_SECONDS = 15
 
 export const DEBUG = import.meta.env.MODE !== 'production'

@@ -159,7 +159,7 @@ try {
             height: innerHeight,
             mainHeight: document.querySelector('main').getBoundingClientRect().height,
             listHeight: document.querySelector('.list-scroll').getBoundingClientRect().height,
-            footerBottom: document.querySelector('footer').getBoundingClientRect().bottom,
+            mainBottom: document.querySelector('main').getBoundingClientRect().bottom,
             horizontalOverflow: document.body.scrollWidth > innerWidth,
             cards: document.querySelectorAll('.card').length,
             error: document.querySelector('#error').textContent,
@@ -178,9 +178,9 @@ try {
     }
     assert.equal(dimensions.width, 400, 'Native popup width collapsed')
     assert.equal(dimensions.height, 600, 'Native popup height collapsed')
-    assert.ok(dimensions.mainHeight > 300, 'Video area is clipped')
-    assert.ok(dimensions.listHeight > 200, 'Video list is clipped')
-    assert.equal(dimensions.footerBottom, 600, 'Footer is clipped')
+    assert.ok(dimensions.mainHeight > 400, 'Video area collapsed')
+    assert.ok(dimensions.listHeight > 300, 'Video list collapsed')
+    assert.equal(dimensions.mainBottom, 600, 'Video area is clipped')
     assert.equal(dimensions.horizontalOverflow, false, 'Content overflows')
     assert.equal(dimensions.cards, 1, 'Saved video did not render')
     assert.equal(dimensions.error, '', 'Popup reported an error')

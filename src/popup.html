@@ -15,14 +15,23 @@
                     class="brand-mark"
                     src="icon-128.png"
                     alt=""
-                    width="42"
-                    height="42"
+                    width="32"
+                    height="32"
                 />
-                <div>
-                    <p class="brand-name">Timestamp Goblin</p>
-                    <p class="brand-caption">Your place, saved.</p>
-                </div>
+                <p class="brand-name">Timestamp Goblin</p>
             </div>
+            <label class="toggle" for="toggle-enabled">
+                <span class="toggle-text"
+                    >Auto-save <span id="saving-state">on</span></span
+                >
+                <input
+                    id="toggle-enabled"
+                    type="checkbox"
+                    checked
+                    aria-label="Auto-save video progress"
+                />
+                <span class="toggle-ui" aria-hidden="true"></span>
+            </label>
             <button
                 id="settings-toggle"
                 class="icon-button settings-toggle"
@@ -107,14 +116,13 @@
                             Finished
                         </button>
                     </nav>
-                    <div class="list-heading">
-                        <h1 id="list-heading">Continue watching</h1>
-                        <span
-                            id="result-summary"
-                            role="status"
-                            aria-live="polite"
-                        ></span>
-                    </div>
+                    <h1 id="list-heading" class="sr-only">Continue watching</h1>
+                    <span
+                        id="result-summary"
+                        class="sr-only"
+                        role="status"
+                        aria-live="polite"
+                    ></span>
                 </div>
                 <div class="list-scroll">
                     <p id="loading" class="loading" role="status">
@@ -125,12 +133,13 @@
                             <img
                                 src="icon-128.png"
                                 alt=""
-                                width="64"
-                                height="64"
+                                width="48"
+                                height="48"
                             />
                         </div>
                         <h2 id="empty-title">Your next video awaits</h2>
                         <p id="empty-description"></p>
+                        <div id="empty-actions" class="empty-actions"></div>
                     </div>
                     <ul
                         id="list"
@@ -139,6 +148,11 @@
                         aria-labelledby="list-heading"
                         aria-busy="true"
                     ></ul>
+                    <button
+                        id="show-more"
+                        class="show-more hidden"
+                        type="button"
+                    ></button>
                 </div>
             </section>
 
@@ -147,28 +161,28 @@
                 class="settings-view hidden"
                 aria-labelledby="settings-heading"
             >
-                <button
-                    id="settings-back"
-                    class="text-button back-button"
-                    type="button"
-                >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="m10 5-7 7 7 7M3 12h18" />
-                    </svg>
-                    Back to videos
-                </button>
-                <h1 id="settings-heading">Settings</h1>
-                <p class="section-description">
-                    A little control over what you keep.
-                </p>
+                <div class="settings-header">
+                    <button
+                        id="settings-back"
+                        class="icon-button"
+                        type="button"
+                        title="Back to videos"
+                        aria-label="Back to videos"
+                    >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="m10 5-7 7 7 7M3 12h18" />
+                        </svg>
+                    </button>
+                    <h1 id="settings-heading">Settings</h1>
+                </div>
                 <section class="ignored" aria-labelledby="ignored-heading">
                     <div class="settings-section-heading">
                         <h2 id="ignored-heading">Ignored channels</h2>
                         <span id="ignored-count" class="section-count">0</span>
                     </div>
                     <p class="section-description">
-                        Videos from these channels stay out of your list.
-                        Restore a channel to see its saved videos again.
+                        Videos from these channels are not saved or shown.
+                        Restore a channel to get its saved videos back.
                     </p>
                     <div id="ignored-list" class="ignored-list"></div>
                 </section>
@@ -187,25 +201,6 @@
                 </div>
             </section>
         </main>
-
-        <footer class="app-footer">
-            <label class="toggle" for="toggle-enabled">
-                <input
-                    id="toggle-enabled"
-                    type="checkbox"
-                    checked
-                    aria-label="Auto-save video progress"
-                />
-                <span class="toggle-ui" aria-hidden="true"></span>
-                <span class="toggle-text"
-                    >Auto-save <span id="saving-state">on</span></span
-                >
-            </label>
-            <span class="footer-note"
-                ><span class="status-dot" aria-hidden="true"></span
-                ><span id="saving-description">Ready when you are</span></span
-            >
-        </footer>
         <script src="popup.js"></script>
     </body>
 </html>
