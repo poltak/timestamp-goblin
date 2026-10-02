@@ -37,10 +37,12 @@ let storedState: StoredVideoState | null | undefined = undefined
 let settings: TrackingSettings | null = null
 let resumePending = false
 /**
- * False from an in-page navigation until the player loads new metadata. In that
- * gap the URL already names the next video, but the player holds the previous one.
+ * The video that the media in the player belongs to: the active video when
+ * that media loaded. During an in-page navigation the URL names the next video
+ * before the player has it, so this is then not the active video. `null` for
+ * media that loaded on a page that is not a watch page.
  */
-let mediaFresh = true
+let mediaVideoId: string | null = null
 let currentFurthestTime = 0
 let saveIntervalId: number | null = null
 let lastWriteAt = 0
@@ -56,7 +58,7 @@ function getState() {
         storedState,
         settings,
         resumePending,
-        mediaFresh,
+        mediaVideoId,
         currentFurthestTime,
         saveIntervalId,
         lastWriteAt,
@@ -102,12 +104,15 @@ function hasActiveMedia(video: HTMLVideoElement): boolean {
     if (video.readyState < HTMLMediaElement.HAVE_METADATA || isAdShowing()) {
         return false
     }
-    // A stale player is the same video only if its length is the stored length.
+    if (mediaVideoId !== null) {
+        return mediaVideoId === activeVideoId
+    }
+    // The miniplayer loaded this media. It is the active video only if its
+    // length is the stored length.
     return (
-        mediaFresh ||
-        (!!storedState &&
-            Math.abs(storedState.duration - video.duration) <=
-                DURATION_MATCH_SECONDS)
+        !!storedState &&
+        Math.abs(storedState.duration - video.duration) <=
+            DURATION_MATCH_SECONDS
     )
 }
 
@@ -115,6 +120,8 @@ export async function saveNow(
     reason: string,
     options: { leaving?: boolean } = {},
 ): Promise<void> {
+    // A resume that is still possible must come before the position is replaced.
+    tryResume()
     const token = sessionToken
     const videoId = activeVideoId
     const video = getMainVideo()
@@ -227,8 +234,8 @@ export function tryResume(): void {
     if (
         !settings.enabled ||
         !state ||
-        // The page can show the channel late, so the stored name counts too.
-        isIgnoredChannel(getChannelName()) ||
+        // After a navigation the page can still show the previous channel, so
+        // only the stored name is used here.
         isIgnoredChannel(state.channel) ||
         state.t < MIN_RESUME_SECONDS ||
         hasExplicitStartTime() ||
@@ -256,7 +263,9 @@ export function tryResume(): void {
             token !== sessionToken ||
             video !== getMainVideo() ||
             videoId !== getVideoId() ||
-            hasExplicitStartTime()
+            hasExplicitStartTime() ||
+            // An ad can start in this element after the seek.
+            !hasActiveMedia(video)
         ) {
             return
         }
@@ -299,13 +308,12 @@ export function handleUrlChange(): void {
     }
     log('url change', { nextVideoId, activeVideoId })
     teardown()
-    mediaFresh = false
     if (nextVideoId) {
         startSession(nextVideoId)
     }
 }
 
-export function onNavigateStart(): void {
+export function onNavigate(): void {
     // Last chance to save: the player still holds the video the user leaves.
     if (activeVideoId && activeVideoId !== getVideoId()) {
         void saveNow('navigate', { leaving: true })
@@ -318,7 +326,7 @@ export function onLoadedMetadata(event: Event): void {
         return
     }
     handleUrlChange()
-    mediaFresh = true
+    mediaVideoId = activeVideoId
     tryResume()
     if (!event.target.paused) {
         startSavingLoop()
@@ -327,6 +335,8 @@ export function onLoadedMetadata(event: Event): void {
 
 export function onPlay(event: Event): void {
     if (isMainVideo(event.target)) {
+        // The player can remove its ad mark after the video metadata loads.
+        tryResume()
         startSavingLoop()
     }
 }
@@ -352,12 +362,13 @@ export function onPageHide(): void {
 const globalListeners: [EventTarget, string, EventListener, boolean][] = [
     [document, 'loadedmetadata', onLoadedMetadata, true],
     [document, 'play', onPlay, true],
+    [document, 'playing', onPlay, true],
     [document, 'pause', onPause, true],
     [document, 'visibilitychange', onVisibilityChange, false],
     [window, 'pagehide', onPageHide, false],
-    [window, 'yt-navigate-start', onNavigateStart, false],
-    [window, 'yt-navigate-finish', handleUrlChange, false],
-    [window, 'popstate', handleUrlChange, false],
+    [window, 'yt-navigate-start', onNavigate, false],
+    [window, 'yt-navigate-finish', onNavigate, false],
+    [window, 'popstate', onNavigate, false],
 ]
 
 export function initContentScript(): void {
@@ -374,7 +385,7 @@ export function initContentScript(): void {
     }
     handleUrlChange()
     // The first player of a document cannot hold a previous video.
-    mediaFresh = true
+    mediaVideoId = activeVideoId
     tryResume()
 }
 
@@ -393,7 +404,7 @@ export const __testing = {
         stopWatchingSettings?.()
         stopWatchingSettings = null
         settings = null
-        mediaFresh = true
+        mediaVideoId = null
         hasInit = false
     },
 }

@@ -141,6 +141,14 @@ describe('content script', () => {
         expect(storageMocks.setVideoState).toHaveBeenCalledTimes(1)
     })
 
+    it('ignores the channel of the previous video that the page still shows', async () => {
+        settings = { enabled: true, ignoredChannels: ['previous'] }
+        youtubeMocks.getChannelName.mockReturnValue('Previous')
+        storageMocks.getVideoState.mockResolvedValue(storedState({ t: 50 }))
+        await start()
+        expect(video.currentTime).toBe(50)
+    })
+
     it('skips saving and resuming for ignored channels', async () => {
         settings = { enabled: true, ignoredChannels: ['channel'] }
         storageMocks.getVideoState.mockResolvedValue(storedState({ t: 50 }))
@@ -359,6 +367,49 @@ describe('content script', () => {
         setMedia(video, { currentTime: 0, duration: 300 })
         video.dispatchEvent(new Event('loadedmetadata'))
         expect(video.currentTime).toBe(120)
+    })
+
+    it('resumes when the player removes its ad mark after the video loaded', async () => {
+        youtubeMocks.isAdShowing.mockReturnValue(true)
+        setMedia(video, { duration: 300 })
+        storageMocks.getVideoState.mockResolvedValue(
+            storedState({ t: 120, duration: 300 }),
+        )
+        await start()
+        video.dispatchEvent(new Event('loadedmetadata'))
+        expect(video.currentTime).toBe(0)
+
+        youtubeMocks.isAdShowing.mockReturnValue(false)
+        video.dispatchEvent(new Event('playing'))
+        expect(video.currentTime).toBe(120)
+    })
+
+    it('resumes before a save can replace the stored position', async () => {
+        youtubeMocks.isAdShowing.mockReturnValue(true)
+        setMedia(video, { duration: 300 })
+        storageMocks.getVideoState.mockResolvedValue(
+            storedState({ t: 120, ft: 120, duration: 300 }),
+        )
+        await start()
+        youtubeMocks.isAdShowing.mockReturnValue(false)
+        video.currentTime = 2
+        await mod.saveNow('pause')
+        expect(video.currentTime).toBe(120)
+        expect(storageMocks.setVideoState).not.toHaveBeenCalled()
+    })
+
+    it('does not move an ad that starts immediately after the resume', async () => {
+        setMedia(video, { duration: 300 })
+        storageMocks.getVideoState.mockResolvedValue(
+            storedState({ t: 120, duration: 300 }),
+        )
+        await start()
+        expect(video.currentTime).toBe(120)
+
+        youtubeMocks.isAdShowing.mockReturnValue(true)
+        setMedia(video, { currentTime: 0, duration: 15 })
+        vi.advanceTimersByTime(500)
+        expect(video.currentTime).toBe(0)
     })
 
     it('does not resume into an ad that the player has not marked yet', async () => {
@@ -625,8 +676,78 @@ describe('content script', () => {
         youtubeMocks.getVideoId.mockReturnValue('vid2')
         window.dispatchEvent(new PopStateEvent('popstate'))
         expect(mod.__testing.getState().activeVideoId).toBe('vid2')
-        expect(mod.__testing.getState().mediaFresh).toBe(false)
+        expect(mod.__testing.getState().mediaVideoId).toBe('vid1')
         expect(storageMocks.getVideoState).toHaveBeenLastCalledWith('vid2')
+    })
+
+    it('saves the video the user leaves with the Back button', async () => {
+        setMedia(video, { currentTime: 80 })
+        await start()
+        youtubeMocks.getVideoId.mockReturnValue('vid2')
+        window.dispatchEvent(new PopStateEvent('popstate'))
+        expect(storageMocks.setVideoState).toHaveBeenCalledTimes(1)
+        expect(storageMocks.setVideoState).toHaveBeenCalledWith(
+            'vid1',
+            expect.objectContaining({ t: 80 }),
+        )
+
+        // A late event for the same navigation must not save the next video.
+        window.dispatchEvent(new Event('yt-navigate-start'))
+        window.dispatchEvent(new Event('yt-navigate-finish'))
+        await vi.advanceTimersByTimeAsync(2000)
+        expect(storageMocks.setVideoState).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not take the previous video for the next one when their lengths match', async () => {
+        setMedia(video, { currentTime: 3, duration: 300, paused: false })
+        await start()
+        storageMocks.getVideoState.mockResolvedValue(
+            storedState({ t: 120, ft: 120, duration: 301 }),
+        )
+
+        youtubeMocks.getVideoId.mockReturnValue('vid2')
+        window.dispatchEvent(new Event('yt-navigate-start'))
+        await vi.advanceTimersByTimeAsync(0)
+        expect(storageMocks.setVideoState).toHaveBeenCalledTimes(1)
+        expect(video.currentTime).toBe(3)
+        expect(mod.__testing.getState().resumePending).toBe(true)
+
+        video.currentTime = 5
+        video.dispatchEvent(new Event('pause'))
+        await vi.advanceTimersByTimeAsync(8000)
+        expect(storageMocks.setVideoState).toHaveBeenCalledTimes(1)
+
+        setMedia(video, { currentTime: 0, duration: 301 })
+        video.dispatchEvent(new Event('loadedmetadata'))
+        expect(video.currentTime).toBe(120)
+    })
+
+    it('uses the stored length for media that the miniplayer loaded', async () => {
+        youtubeMocks.getVideoId.mockReturnValue(null)
+        setMedia(video, { currentTime: 40, duration: 300, paused: false })
+        await start()
+        video.dispatchEvent(new Event('loadedmetadata'))
+        expect(mod.__testing.getState().mediaVideoId).toBeNull()
+
+        // A video with a different length is not the video in the player.
+        storageMocks.getVideoState.mockResolvedValue(
+            storedState({ t: 120, duration: 500 }),
+        )
+        youtubeMocks.getVideoId.mockReturnValue('vid2')
+        window.dispatchEvent(new Event('yt-navigate-finish'))
+        await vi.advanceTimersByTimeAsync(8000)
+        expect(storageMocks.setVideoState).not.toHaveBeenCalled()
+
+        storageMocks.getVideoState.mockResolvedValue(
+            storedState({ t: 20, ft: 20, duration: 300.5 }),
+        )
+        youtubeMocks.getVideoId.mockReturnValue('vid3')
+        window.dispatchEvent(new Event('yt-navigate-finish'))
+        await vi.advanceTimersByTimeAsync(8000)
+        expect(storageMocks.setVideoState).toHaveBeenCalledWith(
+            'vid3',
+            expect.objectContaining({ t: 40 }),
+        )
     })
 
     it('initializes one time and removes its listeners on reset', async () => {
