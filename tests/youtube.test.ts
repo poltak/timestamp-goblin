@@ -7,6 +7,7 @@ import {
     getVideoId,
     getVideoTitle,
     hasExplicitStartTime,
+    isAdShowing,
     isLiveVideo,
     isWatchPage,
 } from '../src/youtube'
@@ -59,6 +60,18 @@ describe('youtube helpers', () => {
         const loadingVod = document.createElement('video')
         Object.defineProperty(loadingVod, 'duration', { value: 120 })
         expect(isLiveVideo(loadingVod)).toBe(false)
+    })
+
+    it('detects an ad in the watch player only', () => {
+        document.body.innerHTML = `
+            <div id="inline-preview-player" class="ad-showing"></div>
+            <div id="movie_player" class="html5-video-player"></div>`
+        expect(isAdShowing()).toBe(false)
+        const player = document.getElementById('movie_player')!
+        player.classList.add('ad-showing')
+        expect(isAdShowing()).toBe(true)
+        player.className = 'html5-video-player ad-interrupting'
+        expect(isAdShowing()).toBe(true)
     })
 
     it('clamps resume target', () => {

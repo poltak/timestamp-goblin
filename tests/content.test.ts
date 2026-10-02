@@ -36,6 +36,7 @@ const youtubeMocks = {
     getVideoId: vi.fn<() => string | null>(() => 'vid1'),
     hasExplicitStartTime: vi.fn(() => false),
     getVideoTitle: vi.fn<() => string | null>(() => 'Title'),
+    isAdShowing: vi.fn(() => false),
     isLiveVideo: vi.fn(() => false),
 }
 
@@ -105,6 +106,7 @@ describe('content script', () => {
         storageMocks.watchTrackingSettings.mockClear()
         youtubeMocks.getVideoId.mockReturnValue('vid1')
         youtubeMocks.hasExplicitStartTime.mockReturnValue(false)
+        youtubeMocks.isAdShowing.mockReturnValue(false)
         youtubeMocks.isLiveVideo.mockReturnValue(false)
         youtubeMocks.getVideoTitle.mockReturnValue('Title')
         youtubeMocks.getChannelName.mockReturnValue('Channel')
@@ -337,6 +339,58 @@ describe('content script', () => {
         video.dispatchEvent(new Event('loadedmetadata'))
         vi.advanceTimersByTime(500)
         expect(video.currentTime).toBe(0)
+    })
+
+    it('does not resume into an ad or save its time as progress', async () => {
+        youtubeMocks.isAdShowing.mockReturnValue(true)
+        setMedia(video, { currentTime: 4, duration: 15, paused: false })
+        storageMocks.getVideoState.mockResolvedValue(
+            storedState({ t: 120, ft: 130, duration: 300 }),
+        )
+        await start()
+        expect(video.currentTime).toBe(4)
+
+        video.dispatchEvent(new Event('pause'))
+        await vi.advanceTimersByTimeAsync(8000)
+        expect(storageMocks.setVideoState).not.toHaveBeenCalled()
+
+        // The video loads in the same element when the ad ends.
+        youtubeMocks.isAdShowing.mockReturnValue(false)
+        setMedia(video, { currentTime: 0, duration: 300 })
+        video.dispatchEvent(new Event('loadedmetadata'))
+        expect(video.currentTime).toBe(120)
+    })
+
+    it('does not resume into an ad that the player has not marked yet', async () => {
+        setMedia(video, { duration: 15 })
+        storageMocks.getVideoState.mockResolvedValue(
+            storedState({ t: 120, duration: 300 }),
+        )
+        await start()
+        expect(video.currentTime).toBe(0)
+        expect(mod.__testing.getState().resumePending).toBe(true)
+
+        setMedia(video, { duration: 300.4 })
+        video.dispatchEvent(new Event('loadedmetadata'))
+        expect(video.currentTime).toBe(120)
+    })
+
+    it('does not seek after it saved progress for a video with a new length', async () => {
+        setMedia(video, { duration: 280 })
+        storageMocks.getVideoState.mockResolvedValue(
+            storedState({ t: 120, duration: 300 }),
+        )
+        await start()
+        expect(mod.__testing.getState().resumePending).toBe(true)
+
+        video.currentTime = 3
+        await mod.saveNow('pause')
+        expect(storageMocks.setVideoState).toHaveBeenCalledWith(
+            'vid1',
+            expect.objectContaining({ t: 3, duration: 280 }),
+        )
+        video.dispatchEvent(new Event('loadedmetadata'))
+        expect(video.currentTime).toBe(3)
     })
 
     it('allows only one save while storage is pending', async () => {

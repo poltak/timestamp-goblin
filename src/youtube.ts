@@ -27,6 +27,15 @@ export function isLiveVideo(video: HTMLVideoElement): boolean {
     return video.duration === Infinity
 }
 
+/** Ads play in the main video element, so their time is not video progress. */
+export function isAdShowing(): boolean {
+    return (
+        document.querySelector(
+            '#movie_player.ad-showing, #movie_player.ad-interrupting',
+        ) !== null
+    )
+}
+
 export function clampResumeTarget(t: number, duration: number): number {
     if (!Number.isFinite(duration) || duration <= 0) {
         return t

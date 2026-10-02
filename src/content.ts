@@ -12,6 +12,7 @@ import {
     getVideoId,
     getVideoTitle,
     hasExplicitStartTime,
+    isAdShowing,
     isLiveVideo,
 } from './youtube'
 import type { StoredVideoState } from './types'
@@ -98,7 +99,7 @@ function isIgnoredChannel(channel: string | null | undefined): boolean {
 
 /** True when the player holds the active video, with its metadata available. */
 function hasActiveMedia(video: HTMLVideoElement): boolean {
-    if (video.readyState < HTMLMediaElement.HAVE_METADATA) {
+    if (video.readyState < HTMLMediaElement.HAVE_METADATA || isAdShowing()) {
         return false
     }
     // A stale player is the same video only if its length is the stored length.
@@ -165,6 +166,8 @@ export async function saveNow(
             lastWriteAt = now
             currentFurthestTime = payload.ft
             storedState = payload
+            // The stored time is now the current time, so a seek has no use.
+            resumePending = false
         }
     } catch (error) {
         log('save failed', error)
@@ -208,9 +211,19 @@ export function tryResume(): void {
     ) {
         return
     }
+    const state = storedState
+    // An ad can load before the player marks it, but it does not have the
+    // length of the video. The video loads its own metadata after the ad.
+    if (
+        state &&
+        Number.isFinite(state.duration) &&
+        Number.isFinite(video.duration) &&
+        Math.abs(state.duration - video.duration) > DURATION_MATCH_SECONDS
+    ) {
+        return
+    }
     resumePending = false
 
-    const state = storedState
     if (
         !settings.enabled ||
         !state ||
