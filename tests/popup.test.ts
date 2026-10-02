@@ -340,9 +340,9 @@ describe('popup', () => {
         expect(search.value).toBe('CHAN')
     })
 
-    it('reuses search data and listeners while typing', async () => {
-        const searchModule = await import('../src/search')
-        const buildIndex = vi.spyOn(searchModule, 'buildVideoSearchIndex')
+    it('reuses popup data and listeners while typing', async () => {
+        const storage = await import('../src/storage')
+        vi.mocked(storage.getPopupData).mockClear()
         const addListener = vi.spyOn(EventTarget.prototype, 'addEventListener')
         const ignoredNode = document.getElementById('ignored-list')!.firstChild
         const input = document.getElementById(
@@ -352,12 +352,11 @@ describe('popup', () => {
             input.value = query
             input.dispatchEvent(new Event('input'))
         }
-        expect(buildIndex).not.toHaveBeenCalled()
+        expect(storage.getPopupData).not.toHaveBeenCalled()
         expect(addListener).not.toHaveBeenCalled()
         expect(document.getElementById('ignored-list')!.firstChild).toBe(
             ignoredNode,
         )
-        buildIndex.mockRestore()
         addListener.mockRestore()
     })
 

@@ -1,49 +1,41 @@
-import MiniSearch from 'minisearch'
-
 import { DEFAULT_CHANNEL_NAME, DEFAULT_VIDEO_TITLE } from './constants'
 import type { VideoItem } from './types'
 
-export type VideoSearchIndex = MiniSearch<VideoItem>
+const SPACE_OR_PUNCTUATION = /[\n\r\p{Z}\p{P}]+/u
 
-export function buildVideoSearchIndex(
-    videos: readonly VideoItem[],
-): VideoSearchIndex {
-    const index = new MiniSearch<VideoItem>({
-        fields: ['title', 'channel'],
-        idField: 'videoId',
-        extractField: (document, fieldName) => {
-            const value = document[fieldName as keyof VideoItem]
-            if (fieldName === 'title') {
-                return typeof value === 'string' && value
-                    ? value
-                    : DEFAULT_VIDEO_TITLE
-            }
-            if (fieldName === 'channel') {
-                return typeof value === 'string' && value
-                    ? value
-                    : DEFAULT_CHANNEL_NAME
-            }
-            return typeof value === 'string' ? value : ''
-        },
-        processTerm: (term) => term.toLowerCase(),
-    })
+/** Records are replaced on each storage read, so stale entries are collected. */
+const wordsByVideo = new WeakMap<VideoItem, string[]>()
 
-    index.addAll(videos)
-    return index
+function splitWords(text: string): string[] {
+    return text.toLowerCase().split(SPACE_OR_PUNCTUATION).filter(Boolean)
 }
 
-export function findVideoIds(
-    index: VideoSearchIndex,
-    query: string,
-): Set<string> {
-    const normalizedQuery = query.trim()
-    if (!normalizedQuery) {
-        return new Set()
+function getWords(video: VideoItem): string[] {
+    let words = wordsByVideo.get(video)
+    if (!words) {
+        words = splitWords(
+            `${video.title || DEFAULT_VIDEO_TITLE} ${video.channel || DEFAULT_CHANNEL_NAME}`,
+        )
+        wordsByVideo.set(video, words)
     }
+    return words
+}
 
-    return new Set(
-        index
-            .search(normalizedQuery, { combineWith: 'AND', prefix: true })
-            .map((result) => String(result.id)),
-    )
+/**
+ * Returns a test for videos in which each query word starts a word of the
+ * title or the channel. Returns null for a query with no words.
+ */
+export function createVideoMatcher(
+    query: string,
+): ((video: VideoItem) => boolean) | null {
+    const terms = splitWords(query)
+    if (terms.length === 0) {
+        return null
+    }
+    return (video) => {
+        const words = getWords(video)
+        return terms.every((term) =>
+            words.some((word) => word.startsWith(term)),
+        )
+    }
 }

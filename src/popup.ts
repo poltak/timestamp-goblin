@@ -14,9 +14,8 @@ import {
     MIN_RESUME_SECONDS,
 } from './constants'
 import { isFinished } from './progress'
-import { buildVideoSearchIndex, findVideoIds } from './search'
+import { createVideoMatcher } from './search'
 import { getThumbnailUrl } from './youtube'
-import type { VideoSearchIndex } from './search'
 
 type Tab = 'unfinished' | 'unwatched' | 'finished'
 
@@ -29,7 +28,6 @@ let videosByTab: Record<Tab, VideoItem[]> = {
 let ignoredChannels: string[] = []
 let enabled = true
 let searchQuery = ''
-let videoSearchIndex: VideoSearchIndex | null = null
 let settingsOpen = false
 let renderedItems: VideoItem[] = []
 let refreshVersion = 0
@@ -167,14 +165,10 @@ function render(): void {
     settingsView?.setAttribute('aria-hidden', String(!settingsOpen))
 
     const normalizedSearchQuery = searchQuery.trim()
-    const matchingVideoIds =
-        normalizedSearchQuery && videoSearchIndex
-            ? findVideoIds(videoSearchIndex, normalizedSearchQuery)
-            : null
+    const matches = createVideoMatcher(normalizedSearchQuery)
     const items: VideoItem[] = []
     for (const video of videosByTab[currentTab]) {
-        if (normalizedSearchQuery && !matchingVideoIds?.has(video.videoId))
-            continue
+        if (normalizedSearchQuery && !matches?.(video)) continue
         items.push(video)
         if (items.length === MAX_POPUP_ITEMS) break
     }
@@ -317,7 +311,6 @@ async function refreshData(): Promise<void> {
         return null
     })
     if (!data || version !== refreshVersion) return
-    videoSearchIndex = buildVideoSearchIndex(data.videos)
     ignoredChannels = data.ignoredChannels
     enabled = data.enabled
     const ignoredSet = new Set(ignoredChannels)
