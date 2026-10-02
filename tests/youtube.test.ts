@@ -97,6 +97,10 @@ describe('youtube helpers', () => {
         expect(getVideoTitle()).toBe('Cool Video')
         document.title = ' - YouTube'
         expect(getVideoTitle()).toBeNull()
+        document.title = 'YouTube'
+        expect(getVideoTitle()).toBeNull()
+        document.title = ''
+        expect(getVideoTitle()).toBeNull()
     })
 
     it('gets the owner channel instead of a recommended channel', () => {

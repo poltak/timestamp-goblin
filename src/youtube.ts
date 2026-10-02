@@ -66,11 +66,9 @@ export function getVideoTitle(): string | null {
     if (title) {
         return title
     }
-    const raw = document.title
-    if (!raw) {
-        return null
-    }
-    return raw.replace(/(?:^|\s+)-\s+YouTube\s*$/, '').trim() || null
+    // Before the page data arrives, the document title is only the site name.
+    const raw = document.title.replace(/(?:^|\s+)-\s+YouTube\s*$/, '').trim()
+    return raw && raw !== 'YouTube' ? raw : null
 }
 
 export function getChannelName(): string | null {
