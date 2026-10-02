@@ -388,6 +388,25 @@ describe('content script', () => {
         expect(mod.__testing.getState().currentFurthestTime).toBe(0)
     })
 
+    it('starts a finished video from the beginning', async () => {
+        const mod = await import('../src/content')
+        const video = document.createElement('video')
+        Object.defineProperty(video, 'duration', { value: 200 })
+        storageMocks.getVideoState.mockResolvedValue({
+            t: 195,
+            ft: 195,
+            updatedAt: 1,
+            duration: 200,
+            title: 'Title',
+            channel: 'Channel',
+        })
+        mod.__testing.setActive('vid1', video)
+        await mod.tryResume(video, 'vid1', mod.__testing.getState().initToken)
+        expect(video.currentTime).toBe(0)
+        expect(mod.__testing.getState().currentFurthestTime).toBe(195)
+        expect(mod.__testing.getState().resumeReapplyId).toBeNull()
+    })
+
     it('uses defaults for missing title/channel and handles infinite duration', async () => {
         const mod = await import('../src/content')
         const video = document.createElement('video')

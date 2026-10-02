@@ -27,6 +27,7 @@ import {
 } from './constants'
 import { log } from './util'
 import { debounce } from './debounce'
+import { isFinished } from './progress'
 
 let activeVideoId: string | null = null
 let activeVideo: HTMLVideoElement | null = null
@@ -221,7 +222,14 @@ export async function tryResume(
         state.t < MIN_RESUME_SECONDS ||
         hasExplicitStartTime() ||
         isLiveVideo(video) ||
-        video.currentTime > NEAR_START_WINDOW_SECONDS
+        video.currentTime > NEAR_START_WINDOW_SECONDS ||
+        // A finished video starts again, as it would end immediately otherwise.
+        isFinished({
+            time: state.t,
+            duration: Number.isFinite(video.duration)
+                ? video.duration
+                : state.duration,
+        })
     ) {
         return
     }

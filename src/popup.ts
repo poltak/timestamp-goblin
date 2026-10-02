@@ -8,12 +8,12 @@ import {
 } from './storage'
 import type { StoredVideoState, VideoItem } from './types'
 import {
-    DEFAULT_UNFINISHED_BUFFER_SECONDS,
     DEFAULT_CHANNEL_NAME,
     DEFAULT_VIDEO_TITLE,
     MAX_POPUP_ITEMS,
     MIN_RESUME_SECONDS,
 } from './constants'
+import { isFinished } from './progress'
 import { buildVideoSearchIndex, findVideoIds } from './search'
 import { getThumbnailUrl } from './youtube'
 import type { VideoSearchIndex } from './search'
@@ -56,7 +56,7 @@ function categorizeVideo(state: StoredVideoState): Tab {
     if (!Number.isFinite(state.duration) || state.t < MIN_RESUME_SECONDS) {
         return 'unwatched'
     }
-    if (state.t >= state.duration - DEFAULT_UNFINISHED_BUFFER_SECONDS) {
+    if (isFinished({ time: state.t, duration: state.duration })) {
         return 'finished'
     }
     return 'unfinished'
