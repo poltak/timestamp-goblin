@@ -66,10 +66,6 @@ function readVideoStates(all: Record<string, unknown>): VideoItem[] {
     return items
 }
 
-export async function getAllVideoStates(): Promise<VideoItem[]> {
-    return readVideoStates(await chrome.storage.local.get())
-}
-
 export async function getPopupData(): Promise<{
     videos: VideoItem[]
     ignoredChannels: string[]
@@ -169,15 +165,6 @@ export function watchTrackingSettings(
         version += 1
         chrome.storage.local.onChanged.removeListener(onChanged)
     }
-}
-
-export async function getEnabled(): Promise<boolean> {
-    const result = await chrome.storage.local.get(ENABLED_KEY)
-    const value = result[ENABLED_KEY]
-    if (typeof value === 'boolean') {
-        return value
-    }
-    return true
 }
 
 export async function setEnabled(enabled: boolean): Promise<void> {

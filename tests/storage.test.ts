@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
     deleteVideoState,
-    getAllVideoStates,
+    getPopupData,
     getVideoState,
     setVideoState,
 } from '../src/storage'
 import type { StoredVideoState } from '../src/types'
 
 type Store = Record<string, unknown>
+
+async function getAllVideoStates() {
+    return (await getPopupData()).videos
+}
 
 describe('storage', () => {
     let store: Store
@@ -153,10 +157,13 @@ describe('storage', () => {
     })
 
     it('defaults enabled to true and can toggle', async () => {
-        const { getEnabled, setEnabled } = await import('../src/storage')
-        expect(await getEnabled()).toBe(true)
+        const { getTrackingSettings, setEnabled } =
+            await import('../src/storage')
+        expect((await getTrackingSettings()).enabled).toBe(true)
+        expect((await getPopupData()).enabled).toBe(true)
         await setEnabled(false)
-        expect(await getEnabled()).toBe(false)
+        expect((await getTrackingSettings()).enabled).toBe(false)
+        expect((await getPopupData()).enabled).toBe(false)
     })
 
     it('loads tracking settings in one storage call', async () => {

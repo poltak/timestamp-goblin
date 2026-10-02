@@ -46,11 +46,9 @@ vi.mock('../src/storage', () => ({
     deleteVideoState: vi.fn(async (id: string) => {
         videos = videos.filter((v) => v.videoId !== id)
     }),
-    getEnabled: vi.fn(async () => enabled),
     setEnabled: vi.fn(async (value: boolean) => {
         enabled = value
     }),
-    getIgnoredChannels: vi.fn(async () => ignored),
     addIgnoredChannel: vi.fn(async (channel: string) => {
         const next = channel.trim().toLowerCase()
         if (!ignored.includes(next)) {
