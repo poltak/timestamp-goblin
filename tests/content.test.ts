@@ -438,6 +438,33 @@ describe('content script', () => {
         expect(storageMocks.setVideoState).toHaveBeenCalled()
     })
 
+    it('keeps saving while the video plays in a hidden tab', async () => {
+        const mod = await import('../src/content')
+        const video = document.createElement('video')
+        Object.defineProperty(video, 'currentTime', {
+            value: 22,
+            writable: true,
+        })
+        Object.defineProperty(video, 'duration', { value: 100 })
+        mod.__testing.setActive('vid1', video)
+        const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+
+        mod.onPlay()
+        mod.onVisibilityChange()
+        await vi.advanceTimersByTimeAsync(0)
+        expect(storageMocks.setVideoState).toHaveBeenCalledTimes(1)
+        expect(mod.__testing.getState().saveIntervalId).not.toBeNull()
+
+        video.currentTime = 30
+        await vi.advanceTimersByTimeAsync(8000)
+        expect(storageMocks.setVideoState).toHaveBeenCalledTimes(2)
+        expect(storageMocks.setVideoState.mock.calls[1][1].t).toBe(30)
+
+        mod.onPause()
+        expect(mod.__testing.getState().saveIntervalId).toBeNull()
+        hidden.mockRestore()
+    })
+
     it('keeps the new wait handle when an older initialization finishes', async () => {
         const mod = await import('../src/content')
         const first = deferred<HTMLVideoElement>()

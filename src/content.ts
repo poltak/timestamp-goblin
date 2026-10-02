@@ -167,16 +167,12 @@ export function onPause(): void {
 }
 
 export function onPlay(): void {
-    if (!document.hidden) startSavingLoop()
+    startSavingLoop()
 }
 
 export function onVisibilityChange(): void {
-    if (document.hidden) {
-        void saveNow('hidden')
-        stopSavingLoop()
-    } else if (activeVideo && !activeVideo.paused) {
-        startSavingLoop()
-    }
+    // A hidden tab can continue to play, so only the pause event stops the loop.
+    if (document.hidden) void saveNow('hidden')
 }
 
 export function stopSavingLoop(): void {
@@ -292,7 +288,7 @@ export async function initForVideo(videoId: string): Promise<void> {
     video.addEventListener('play', onPlay)
     document.addEventListener('visibilitychange', onVisibilityChange)
 
-    if (!video.paused && !document.hidden) {
+    if (!video.paused) {
         startSavingLoop()
     }
 }
