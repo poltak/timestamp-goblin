@@ -30,8 +30,9 @@ describe('storage', () => {
             set: vi.fn(async (value: Store) => {
                 store = { ...store, ...value }
             }),
-            remove: vi.fn(async (key: string) => {
-                delete store[key]
+            remove: vi.fn(async (keys: string | string[]) => {
+                for (const key of Array.isArray(keys) ? keys : [keys])
+                    delete store[key]
             }),
         }
         Object.assign(globalThis.chrome.storage, { local })
@@ -280,6 +281,61 @@ describe('storage', () => {
         ])
         expect(chrome.storage.local.get).toHaveBeenCalledTimes(1)
         expect(chrome.storage.local.get).toHaveBeenCalledWith()
+    })
+
+    it('reads the retention period with one year as the default', async () => {
+        const { setRetentionMonths } = await import('../src/storage')
+        expect((await getPopupData()).retentionMonths).toBe(12)
+        await setRetentionMonths(0)
+        expect((await getPopupData()).retentionMonths).toBe(0)
+        await chrome.storage.local.set({ 'retention:months': 'bad' })
+        expect((await getPopupData()).retentionMonths).toBe(12)
+    })
+
+    it('deletes only the videos that were not watched during the period', async () => {
+        const { pruneExpiredVideos, setRetentionMonths } =
+            await import('../src/storage')
+        const now = new Date('2026-10-03T12:00:00Z').getTime()
+        const day = 24 * 60 * 60 * 1000
+        const state = (updatedAt: number) => ({
+            t: 10,
+            ft: 10,
+            updatedAt,
+            duration: 100,
+            title: 'Title',
+            channel: 'Channel',
+        })
+        await chrome.storage.local.set({
+            enabled: true,
+            'ytp:recent': state(now - 30 * day),
+            'ytp:old': state(now - 200 * day),
+            'ytp:ancient': state(now - 800 * day),
+            'ytp:unknown-format': { updatedAt: 1 },
+        })
+
+        expect(await pruneExpiredVideos(now)).toBe(1)
+        expect(Object.keys(store).sort()).toEqual([
+            'enabled',
+            'ytp:old',
+            'ytp:recent',
+            'ytp:unknown-format',
+        ])
+
+        await setRetentionMonths(0)
+        expect(await pruneExpiredVideos(now)).toBe(0)
+        expect(store['ytp:old']).toBeDefined()
+
+        await setRetentionMonths(3)
+        vi.mocked(chrome.storage.local.remove).mockClear()
+        expect(await pruneExpiredVideos(now)).toBe(1)
+        expect(chrome.storage.local.remove).toHaveBeenCalledWith(['ytp:old'])
+        expect(store['ytp:recent']).toBeDefined()
+    })
+
+    it('does not call storage to delete an empty list', async () => {
+        const { deleteVideoStates } = await import('../src/storage')
+        await deleteVideoStates([])
+        expect(chrome.storage.local.remove).not.toHaveBeenCalled()
     })
 
     it('deletes state', async () => {

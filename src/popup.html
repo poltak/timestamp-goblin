@@ -175,7 +175,10 @@
                     </button>
                     <h1 id="settings-heading">Settings</h1>
                 </div>
-                <section class="ignored" aria-labelledby="ignored-heading">
+                <section
+                    class="settings-card ignored"
+                    aria-labelledby="ignored-heading"
+                >
                     <div class="settings-section-heading">
                         <h2 id="ignored-heading">Ignored channels</h2>
                         <span id="ignored-count" class="section-count">0</span>
@@ -185,6 +188,49 @@
                         Restore a channel to get its saved videos back.
                     </p>
                     <div id="ignored-list" class="ignored-list"></div>
+                </section>
+                <section
+                    class="settings-card retention"
+                    aria-labelledby="retention-heading"
+                >
+                    <div class="settings-section-heading">
+                        <h2 id="retention-heading">
+                            <label for="retention-select"
+                                >Keep saved videos</label
+                            >
+                        </h2>
+                        <div class="select">
+                            <select id="retention-select" disabled></select>
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="m7 10 5 5 5-5" />
+                            </svg>
+                        </div>
+                    </div>
+                    <p class="section-description">
+                        A video that you do not watch for this time is deleted
+                        automatically.
+                    </p>
+                    <div
+                        id="retention-confirm"
+                        class="retention-confirm hidden"
+                        role="alert"
+                    >
+                        <p id="retention-confirm-text"></p>
+                        <div class="retention-confirm-actions">
+                            <button
+                                id="retention-cancel"
+                                class="secondary-button"
+                                type="button"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                id="retention-apply"
+                                class="danger-button"
+                                type="button"
+                            ></button>
+                        </div>
+                    </div>
                 </section>
                 <div class="privacy-note">
                     <svg viewBox="0 0 24 24" aria-hidden="true">

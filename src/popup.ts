@@ -1,10 +1,12 @@
 import {
     addIgnoredChannel,
     deleteVideoState,
+    deleteVideoStates,
     getPopupData,
     normalizeChannelName,
     removeIgnoredChannel,
     setEnabled,
+    setRetentionMonths,
 } from './storage'
 import type { StoredVideoState, VideoItem } from './types'
 import {
@@ -15,6 +17,12 @@ import {
     MIN_RESUME_SECONDS,
 } from './constants'
 import { isFinished } from './progress'
+import {
+    DEFAULT_RETENTION_MONTHS,
+    RETENTION_OPTIONS,
+    findExpiredVideos,
+    getRetentionLabel,
+} from './retention'
 import { createVideoMatcher } from './search'
 import { getThumbnailUrl } from './youtube'
 
@@ -32,6 +40,9 @@ let videosByTab: Record<Tab, VideoItem[]> = {
 }
 let ignoredChannels: string[] = []
 let enabled = true
+let retentionMonths = DEFAULT_RETENTION_MONTHS
+/** A shorter retention period that waits for the user to confirm its deletions. */
+let pendingRetention: { months: number; videoIds: string[] } | null = null
 let searchQuery = ''
 let settingsOpen = false
 let visibleLimit = MAX_POPUP_ITEMS
@@ -350,6 +361,26 @@ function render(): void {
     }
 }
 
+function renderRetention(): void {
+    const select = document.getElementById(
+        'retention-select',
+    ) as HTMLSelectElement | null
+    const confirm = document.getElementById('retention-confirm')
+    if (!select || !confirm) return
+    // The count of deleted videos is not known before the first read.
+    select.disabled = !allVideos
+    select.value = String(pendingRetention?.months ?? retentionMonths)
+    confirm.classList.toggle('hidden', !pendingRetention)
+    if (!pendingRetention) return
+    const count = pendingRetention.videoIds.length
+    const videos = `${count} ${count === 1 ? 'video' : 'videos'}`
+    const text = document.getElementById('retention-confirm-text')
+    const apply = document.getElementById('retention-apply')
+    if (text)
+        text.textContent = `This deletes ${videos} that you did not watch in the last ${getRetentionLabel(pendingRetention.months)}. You cannot undo this.`
+    if (apply) apply.textContent = `Delete ${videos}`
+}
+
 function renderIgnoredChannels(): void {
     const count = document.getElementById('ignored-count')
     if (count) count.textContent = String(ignoredChannels.length)
@@ -407,6 +438,7 @@ function groupVideos(): void {
 function renderAll(): void {
     groupVideos()
     renderIgnoredChannels()
+    renderRetention()
     render()
 }
 
@@ -417,7 +449,20 @@ async function refreshData(): Promise<void> {
         return null
     })
     if (!data || version !== refreshVersion) return
-    allVideos = data.videos.slice().sort((a, b) => b.updatedAt - a.updatedAt)
+    retentionMonths = data.retentionMonths
+    // The background worker deletes expired videos when the browser starts.
+    // A browser can stay open for a long time, so the popup does it too.
+    const expired = new Set(
+        findExpiredVideos(data.videos, retentionMonths, Date.now()).map(
+            (video) => video.videoId,
+        ),
+    )
+    if (expired.size > 0) {
+        deleteVideoStates([...expired]).catch(() => {})
+    }
+    allVideos = data.videos
+        .filter((video) => !expired.has(video.videoId))
+        .sort((a, b) => b.updatedAt - a.updatedAt)
     ignoredChannels = data.ignoredChannels
     enabled = data.enabled
     renderAll()
@@ -445,6 +490,7 @@ function runMutation(operation: () => Promise<void>): void {
             else await refreshData()
             showError('')
         } catch {
+            renderRetention()
             render()
             showError('Could not update saved videos. Try again.')
         }
@@ -489,6 +535,62 @@ function setSettingsOpen(open: boolean): void {
     settingsOpen = open
     render()
     document.getElementById(open ? 'settings-back' : 'settings-toggle')?.focus()
+}
+
+function setupRetention(): void {
+    const select = document.getElementById(
+        'retention-select',
+    ) as HTMLSelectElement | null
+    if (!select) return
+    select.innerHTML = RETENTION_OPTIONS.map(
+        (option) => `<option value="${option.months}">${option.label}</option>`,
+    ).join('')
+    select.value = String(retentionMonths)
+
+    const save = (months: number, videoIds: string[]) => {
+        pendingRetention = null
+        runMutation(async () => {
+            await setRetentionMonths(months)
+            retentionMonths = months
+            await deleteVideoStates(videoIds)
+            const deleted = new Set(videoIds)
+            allVideos =
+                allVideos?.filter((video) => !deleted.has(video.videoId)) ??
+                null
+        })
+    }
+    select.addEventListener('change', () => {
+        const months = Number(select.value)
+        const videoIds = findExpiredVideos(
+            allVideos ?? [],
+            months,
+            Date.now(),
+        ).map((video) => video.videoId)
+        if (months === retentionMonths || videoIds.length === 0) {
+            if (months === retentionMonths) pendingRetention = null
+            else save(months, [])
+            renderRetention()
+            return
+        }
+        // A deletion cannot be undone, so the user confirms it first.
+        pendingRetention = { months, videoIds }
+        renderRetention()
+    })
+    document
+        .getElementById('retention-cancel')
+        ?.addEventListener('click', () => {
+            pendingRetention = null
+            renderRetention()
+            select.focus()
+        })
+    document
+        .getElementById('retention-apply')
+        ?.addEventListener('click', () => {
+            if (!pendingRetention) return
+            save(pendingRetention.months, pendingRetention.videoIds)
+            renderRetention()
+            select.focus()
+        })
 }
 
 function showTab(tab: Tab): void {
@@ -542,6 +644,8 @@ document.addEventListener(
                     setSettingsOpen(false)
                 }
             })
+
+        setupRetention()
 
         const toggle = document.getElementById(
             'toggle-enabled',

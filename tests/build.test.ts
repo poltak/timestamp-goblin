@@ -10,6 +10,7 @@ it('updates static assets and scripts in watch mode', async () => {
     const root = await mkdtemp(join(tmpdir(), 'goblin-watch-'))
     await mkdir(join(root, 'src/assets'), { recursive: true })
     const files = {
+        'background.ts': 'console.log("background")',
         'content.ts': 'console.log("original content")',
         'popup.ts': 'console.log("popup")',
         'popup.html': '<main>Original</main>',

@@ -1,9 +1,11 @@
 import type { StoredVideoState, VideoItem } from './types'
 import { DEFAULT_CHANNEL_NAME, DEFAULT_VIDEO_TITLE } from './constants'
+import { findExpiredVideos, readRetentionMonths } from './retention'
 
 const VIDEO_KEY_PREFIX = 'ytp:'
 const IGNORED_CHANNELS_KEY = 'ignored:channels'
 const ENABLED_KEY = 'enabled'
+const RETENTION_KEY = 'retention:months'
 
 function keyFor(videoId: string): string {
     return `${VIDEO_KEY_PREFIX}${videoId}`
@@ -70,6 +72,7 @@ export async function getPopupData(): Promise<{
     videos: VideoItem[]
     ignoredChannels: string[]
     enabled: boolean
+    retentionMonths: number
 }> {
     const all = await chrome.storage.local.get()
     return {
@@ -77,6 +80,7 @@ export async function getPopupData(): Promise<{
         ignoredChannels: readIgnoredChannels(all[IGNORED_CHANNELS_KEY]),
         enabled:
             typeof all[ENABLED_KEY] === 'boolean' ? all[ENABLED_KEY] : true,
+        retentionMonths: readRetentionMonths(all[RETENTION_KEY]),
     }
 }
 
@@ -99,6 +103,33 @@ export async function setVideoState(
 export async function deleteVideoState(videoId: string): Promise<void> {
     const key = keyFor(videoId)
     await chrome.storage.local.remove(key)
+}
+
+export async function deleteVideoStates(
+    videoIds: readonly string[],
+): Promise<void> {
+    if (videoIds.length > 0) {
+        await chrome.storage.local.remove(videoIds.map(keyFor))
+    }
+}
+
+export async function setRetentionMonths(months: number): Promise<void> {
+    await chrome.storage.local.set({ [RETENTION_KEY]: months })
+}
+
+/**
+ * Deletes the videos that were not watched during the retention period that
+ * the user selected. Returns the number of deleted videos.
+ */
+export async function pruneExpiredVideos(now = Date.now()): Promise<number> {
+    const all = await chrome.storage.local.get()
+    const expired = findExpiredVideos(
+        readVideoStates(all),
+        readRetentionMonths(all[RETENTION_KEY]),
+        now,
+    )
+    await deleteVideoStates(expired.map((video) => video.videoId))
+    return expired.length
 }
 
 function readIgnoredChannels(value: unknown): string[] {

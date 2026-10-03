@@ -104,7 +104,7 @@ p {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 14px 16px 12px;
+    padding: 14px 16px 10px;
     flex-shrink: 0;
 }
 .brand {
@@ -640,7 +640,8 @@ main {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 2px 8px 20px 16px;
+    /* Room for the focus ring of the back button, which the scroll area clips. */
+    padding: 6px 8px 20px 16px;
 }
 .settings-header {
     display: flex;
@@ -659,12 +660,15 @@ main {
     line-height: 1.55;
     margin-top: 4px;
 }
-.ignored {
+.settings-card {
     margin-top: 14px;
     padding: 14px;
     border: 1px solid var(--line);
     border-radius: 12px;
     background: var(--surface);
+}
+.settings-card + .settings-card {
+    margin-top: 10px;
 }
 .settings-section-heading {
     display: flex;
@@ -727,6 +731,84 @@ main {
     border-top: 1px solid var(--line);
     font-size: 12px;
     color: var(--muted);
+}
+.select {
+    position: relative;
+    flex-shrink: 0;
+}
+.select select {
+    height: 30px;
+    padding: 0 28px 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--canvas);
+    color: var(--ink);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    appearance: none;
+    cursor: pointer;
+}
+.select select:hover:not(:disabled) {
+    border-color: var(--accent);
+}
+.select select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.select select:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+.select svg {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 14px;
+    height: 14px;
+    color: var(--muted);
+    pointer-events: none;
+}
+.retention-confirm {
+    margin-top: 12px;
+    padding: 11px 12px;
+    border: 1px solid var(--danger);
+    border-radius: 10px;
+    background: var(--danger-surface);
+}
+.retention-confirm p {
+    color: var(--ink);
+    font-size: 12px;
+    line-height: 1.5;
+}
+.retention-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 10px;
+}
+.secondary-button,
+.danger-button {
+    height: 28px;
+    padding: 0 11px;
+    border-radius: 8px;
+    font-size: 11.5px;
+    font-weight: 650;
+}
+.secondary-button {
+    border: 1px solid var(--line);
+    background: var(--surface);
+}
+.secondary-button:hover {
+    border-color: var(--accent);
+}
+.danger-button {
+    border: 1px solid var(--danger);
+    background: var(--danger);
+    color: var(--surface);
+}
+.danger-button:hover {
+    filter: brightness(1.08);
 }
 .privacy-note {
     display: flex;

@@ -36,15 +36,23 @@ const seedVideos = [
 let videos = [...seedVideos]
 let ignored: string[] = []
 let enabled = true
+let retention = 0
 
 vi.mock('../src/storage', () => ({
     getPopupData: vi.fn(async () => ({
         videos,
         ignoredChannels: ignored,
         enabled,
+        retentionMonths: retention,
     })),
     deleteVideoState: vi.fn(async (id: string) => {
         videos = videos.filter((v) => v.videoId !== id)
+    }),
+    deleteVideoStates: vi.fn(async (ids: string[]) => {
+        videos = videos.filter((v) => !ids.includes(v.videoId))
+    }),
+    setRetentionMonths: vi.fn(async (months: number) => {
+        retention = months
     }),
     setEnabled: vi.fn(async (value: boolean) => {
         enabled = value
@@ -82,6 +90,7 @@ describe('popup', () => {
         videos = [...seedVideos]
         ignored = []
         enabled = true
+        retention = 0
         vi.resetModules()
         await import('../src/popup')
         document.dispatchEvent(new Event('DOMContentLoaded'))
@@ -662,6 +671,120 @@ describe('popup', () => {
         expect(card('unknown').querySelector('.bar')).toBeNull()
         expect(card('unknown').querySelector('.video-duration')).toBeNull()
         expect(card('unknown').textContent).toContain('Resume 1:23:20')
+    })
+
+    describe('retention', () => {
+        const day = 24 * 60 * 60 * 1000
+        const reload = async () => {
+            setBaseDom()
+            vi.resetModules()
+            await import('../src/popup')
+            document.dispatchEvent(new Event('DOMContentLoaded'))
+            await new Promise((resolve) => setTimeout(resolve, 0))
+        }
+        const select = () =>
+            document.getElementById('retention-select') as HTMLSelectElement
+        const choose = (months: number) => {
+            select().value = String(months)
+            select().dispatchEvent(new Event('change'))
+        }
+        const confirm = () => document.getElementById('retention-confirm')!
+
+        beforeEach(async () => {
+            retention = 12
+            videos = [
+                { ...seedVideos[0], videoId: 'new', updatedAt: Date.now() },
+                {
+                    ...seedVideos[0],
+                    videoId: 'old',
+                    updatedAt: Date.now() - 120 * day,
+                },
+                {
+                    ...seedVideos[0],
+                    videoId: 'expired',
+                    updatedAt: Date.now() - 400 * day,
+                },
+            ]
+            await reload()
+        })
+
+        it('deletes expired videos when the popup opens', async () => {
+            const storage = await import('../src/storage')
+            expect(storage.deleteVideoStates).toHaveBeenLastCalledWith([
+                'expired',
+            ])
+            const ids = Array.from(
+                document.querySelectorAll<HTMLElement>('.card'),
+            ).map((card) => card.dataset.videoId)
+            expect(ids).toEqual(['new', 'old'])
+            expect(select().value).toBe('12')
+            expect(select().disabled).toBe(false)
+            expect(
+                Array.from(select().options).map((option) => option.text),
+            ).toEqual(['3 months', '6 months', '1 year', '2 years', 'Forever'])
+        })
+
+        it('saves a period that deletes nothing at once', async () => {
+            const storage = await import('../src/storage')
+            choose(0)
+            await new Promise((resolve) => setTimeout(resolve, 0))
+            expect(storage.setRetentionMonths).toHaveBeenLastCalledWith(0)
+            expect(retention).toBe(0)
+            expect(confirm().classList.contains('hidden')).toBe(true)
+        })
+
+        it('asks before a shorter period deletes videos', async () => {
+            const storage = await import('../src/storage')
+            vi.mocked(storage.setRetentionMonths).mockClear()
+            choose(3)
+            expect(confirm().classList.contains('hidden')).toBe(false)
+            expect(
+                document.getElementById('retention-confirm-text')?.textContent,
+            ).toBe(
+                'This deletes 1 video that you did not watch in the last 3 months. You cannot undo this.',
+            )
+            expect(
+                document.getElementById('retention-apply')?.textContent,
+            ).toBe('Delete 1 video')
+            expect(storage.setRetentionMonths).not.toHaveBeenCalled()
+
+            document.getElementById('retention-cancel')!.click()
+            expect(confirm().classList.contains('hidden')).toBe(true)
+            expect(select().value).toBe('12')
+            expect(document.activeElement).toBe(select())
+
+            choose(3)
+            document.getElementById('retention-apply')!.click()
+            await new Promise((resolve) => setTimeout(resolve, 0))
+            expect(storage.setRetentionMonths).toHaveBeenLastCalledWith(3)
+            expect(storage.deleteVideoStates).toHaveBeenLastCalledWith(['old'])
+            expect(confirm().classList.contains('hidden')).toBe(true)
+            expect(select().value).toBe('3')
+            expect(
+                Array.from(document.querySelectorAll<HTMLElement>('.card')).map(
+                    (card) => card.dataset.videoId,
+                ),
+            ).toEqual(['new'])
+        })
+
+        it('closes the question when the user selects the saved period again', () => {
+            choose(3)
+            choose(12)
+            expect(confirm().classList.contains('hidden')).toBe(true)
+        })
+
+        it('shows the saved period again when the write fails', async () => {
+            const storage = await import('../src/storage')
+            vi.mocked(storage.setRetentionMonths).mockRejectedValueOnce(
+                new Error('unavailable'),
+            )
+            choose(24)
+            await new Promise((resolve) => setTimeout(resolve, 0))
+            expect(select().value).toBe('12')
+            expect(
+                document.getElementById('error')!.classList.contains('hidden'),
+            ).toBe(false)
+        })
     })
 
     it('toggles enabled state', async () => {

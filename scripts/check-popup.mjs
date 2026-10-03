@@ -125,7 +125,7 @@ try {
             duration: 305,
             t: 122,
             ft: 205,
-            updatedAt: 1,
+            updatedAt: Date.now(),
         },
     }
     await evaluate({

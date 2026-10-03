@@ -27,7 +27,7 @@ await Promise.all(
 )
 
 const buildOptions = {
-    entryPoints: ['src/content.ts', 'src/popup.ts'],
+    entryPoints: ['src/background.ts', 'src/content.ts', 'src/popup.ts'],
     outdir: distDir,
     bundle: true,
     format: 'iife',
