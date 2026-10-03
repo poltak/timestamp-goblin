@@ -1,7 +1,7 @@
 {
     "packageManager": "pnpm@11.25.0",
     "name": "timestamp-goblin",
-    "version": "0.1.6",
+    "version": "0.1.7",
     "private": true,
     "description": "Chrome extension to persist YouTube watch progress.",
     "type": "module",
