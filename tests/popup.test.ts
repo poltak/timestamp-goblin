@@ -865,7 +865,12 @@ describe('popup', () => {
         toggle.checked = false
         toggle.dispatchEvent(new Event('change'))
         await new Promise((resolve) => setTimeout(resolve, 0))
-        oldLoad.resolve({ videos, ignoredChannels: [], enabled: true })
+        oldLoad.resolve({
+            videos,
+            ignoredChannels: [],
+            enabled: true,
+            retentionMonths: 0,
+        })
         await new Promise((resolve) => setTimeout(resolve, 0))
         expect(toggle.checked).toBe(false)
         expect(document.body.classList.contains('is-disabled')).toBe(true)
